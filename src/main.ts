@@ -135,6 +135,17 @@ export default class Taskgregator extends Plugin {
       // to Files/Search (no ribbon icon).
       await this.ensureNav();
       if (this.settings.enableContextSidebar) await this.activateContextView();
+      if (this.settings.startupView !== "disabled") {
+        // Land on the chosen list regardless of any restored in-memory selection.
+        const v = this.settings.startupView;
+        this.state.selection =
+          v === "today"
+            ? { type: "today" }
+            : v === "flagged"
+            ? { type: "flagged" }
+            : { type: "all" };
+        await this.activateView();
+      }
       this.refreshViews();
     });
   }

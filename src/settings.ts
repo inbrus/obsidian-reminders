@@ -1,6 +1,8 @@
 import { App, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
 import type Taskgregator from "./main";
 
+export type StartupView = "disabled" | "today" | "all" | "flagged";
+
 export interface SmartList {
   name: string;
   tag: string; // tag without leading '#'
@@ -28,6 +30,8 @@ export interface TaskgregatorSettings {
   useEmojiMetadata: boolean;
   // Auto-open the context sidebar (follows the active file) on startup.
   enableContextSidebar: boolean;
+  // Which list the main Taskgregator panel opens to on startup ("disabled" = don't auto-open).
+  startupView: StartupView;
   // "Soon" smart-list window in days (tasks due within the next N days).
   soonDays: number;
 }
@@ -48,6 +52,7 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
   showCompleted: false,
   useEmojiMetadata: true,
   enableContextSidebar: true,
+  startupView: "disabled",
   soonDays: 7,
 };
 
@@ -111,6 +116,15 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         desc: "Auto-open the file-context task panel in the right sidebar on startup.",
         control: { type: "toggle", key: "enableContextSidebar" },
       },
+      {
+        name: "Load Taskgregator on startup",
+        desc: "Open the main Taskgregator panel to a list automatically when Obsidian starts.",
+        control: {
+          type: "dropdown",
+          key: "startupView",
+          options: { disabled: "Disabled", today: "Today", all: "All", flagged: "Flagged" },
+        },
+      },
     ];
   }
 
@@ -135,6 +149,8 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         return s.showCompleted;
       case "enableContextSidebar":
         return s.enableContextSidebar;
+      case "startupView":
+        return s.startupView;
       default:
         return undefined;
     }
@@ -169,6 +185,9 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         break;
       case "enableContextSidebar":
         s.enableContextSidebar = Boolean(value);
+        break;
+      case "startupView":
+        s.startupView = normalizeStartupView(value);
         break;
       default:
         return;
@@ -291,6 +310,22 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Load Taskgregator on startup")
+      .setDesc("Open the main Taskgregator panel to a list automatically when Obsidian starts.")
+      .addDropdown((dd) =>
+        dd
+          .addOption("disabled", "Disabled")
+          .addOption("today", "Today")
+          .addOption("all", "All")
+          .addOption("flagged", "Flagged")
+          .setValue(this.plugin.settings.startupView)
+          .onChange(async (v) => {
+            this.plugin.settings.startupView = normalizeStartupView(v);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Reindex now")
       .setDesc("Rescan the vault for tasks.")
       .addButton((b) =>
@@ -299,6 +334,11 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         })
       );
   }
+}
+
+function normalizeStartupView(value: unknown): StartupView {
+  const v = String(value);
+  return v === "today" || v === "all" || v === "flagged" ? v : "disabled";
 }
 
 function clampDays(value: unknown): number {
