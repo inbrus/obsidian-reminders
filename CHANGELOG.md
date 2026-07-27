@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.1
+
+Compliance fix for the community-plugin review. No functional changes.
+
+### Fixed
+- **iOS compatibility.** The inline tag renderer no longer uses a regex lookbehind (unsupported on iOS before 16.4). It now consumes the leading boundary and re-emits it, matching the parser's tag pattern; behavior is unchanged on desktop.
+- **No direct style assignment.** The navigator's tree rows now set indentation via `setCssStyles` instead of assigning to `el.style`, satisfying `obsidianmd/no-static-styles-assignment`.
+
 ## 2.2.0
 
 Feature release. Tags become first-class navigation, and you can jump straight into Taskgregator on startup.

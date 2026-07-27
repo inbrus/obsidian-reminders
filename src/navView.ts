@@ -164,7 +164,7 @@ export class TaskgregatorNavView extends ItemView {
     const active = this.state.selection.type === "tags";
 
     const row = parent.createDiv({ cls: "tg-tree-row" + (active ? " is-active" : "") });
-    row.style.paddingLeft = "8px";
+    row.setCssStyles({ paddingLeft: "8px" });
 
     const twisty = row.createSpan({ cls: "tg-twisty" });
     setIcon(twisty, isCollapsed ? "chevron-right" : "chevron-down");
@@ -189,7 +189,7 @@ export class TaskgregatorNavView extends ItemView {
       const tagActive =
         this.state.selection.type === "smart" && this.state.selection.tag === tag;
       const child = parent.createDiv({ cls: "tg-tree-row" + (tagActive ? " is-active" : "") });
-      child.style.paddingLeft = 8 + 14 + "px";
+      child.setCssStyles({ paddingLeft: 8 + 14 + "px" });
       child.createSpan({ cls: "tg-twisty tg-twisty-empty" });
       const cic = child.createSpan({ cls: "tg-tree-icon" });
       setIcon(cic, "hash");
@@ -208,7 +208,7 @@ export class TaskgregatorNavView extends ItemView {
     const isCollapsed = this.state.collapsed.has(node.key);
 
     const row = parent.createDiv({ cls: "tg-tree-row" + (active ? " is-active" : "") });
-    row.style.paddingLeft = 8 + depth * 14 + "px";
+    row.setCssStyles({ paddingLeft: 8 + depth * 14 + "px" });
 
     // Twisty (caret) toggles collapse without changing selection.
     const twisty = row.createSpan({ cls: "tg-twisty" });

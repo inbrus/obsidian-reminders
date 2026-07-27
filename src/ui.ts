@@ -180,9 +180,10 @@ export function renderTextWithLinks(
   onTagClick?: (tag: string) => void
 ): void {
   // Render [[wikilinks]], Markdown inline links, and inline #tags as clickable
-  // links; rest as plain text. The tag pattern mirrors the parser's TAG_RE and
-  // uses a lookbehind so the preceding whitespace stays in the plain-text slice.
-  const re = /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)|(?<=^|\s)#([A-Za-z][\w\-/]*)/g;
+  // links; rest as plain text. The tag pattern mirrors the parser's TAG_RE: it
+  // consumes the leading boundary (^ or whitespace) rather than a lookbehind
+  // (unsupported on iOS < 16.4) and re-emits that whitespace as plain text.
+  const re = /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)|(^|\s)#([A-Za-z][\w\-/]*)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
@@ -192,8 +193,9 @@ export function renderTextWithLinks(
       renderWikilink(app, el, m[1]);
     } else if (m[2] !== undefined) {
       renderMarkdownLink(app, el, m[2], m[3]);
-    } else if (m[4] !== undefined) {
-      renderTag(app, el, m[4], onTagClick);
+    } else if (m[5] !== undefined) {
+      if (m[4]) el.appendText(m[4]);
+      renderTag(app, el, m[5], onTagClick);
     }
 
     last = m.index + m[0].length;
