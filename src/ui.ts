@@ -175,22 +175,56 @@ export function renderTextWithLinks(
   text: string,
   _links: string[]
 ): void {
-  // Render [[wikilinks]] as clickable internal links; rest as plain text.
-  const re = /\[\[([^\]]+?)\]\]/g;
+  // Render [[wikilinks]] and Markdown inline links as clickable links; rest as plain text.
+  const re = /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) el.appendText(text.slice(last, m.index));
-    const target = m[1].split("|")[0];
-    const label = m[1].split("|")[1] || (target.split("/").pop() as string);
-    const a = el.createEl("a", { cls: "tg-link internal-link", text: label });
-    a.onclick = (ev) => {
-      ev.preventDefault();
-      void app.workspace.openLinkText(target, "", false);
-    };
+
+    if (m[1]) {
+      renderWikilink(app, el, m[1]);
+    } else {
+      renderMarkdownLink(app, el, m[2], m[3]);
+    }
+
     last = m.index + m[0].length;
   }
   if (last < text.length) el.appendText(text.slice(last));
+}
+
+function renderWikilink(app: App, el: HTMLElement, linkText: string): void {
+  const target = linkText.split("|")[0];
+  const label = linkText.split("|")[1] || (target.split("/").pop() as string);
+  const a = el.createEl("a", { cls: "tg-link internal-link", text: label });
+  a.onclick = (ev) => {
+    ev.preventDefault();
+    void app.workspace.openLinkText(target, "", false);
+  };
+}
+
+function renderMarkdownLink(app: App, el: HTMLElement, label: string, target: string): void {
+  const external = /^(https?:|mailto:|obsidian:)/i.test(target);
+  const a = el.createEl("a", {
+    cls: external ? "tg-link external-link" : "tg-link internal-link",
+    text: label,
+  });
+
+  if (external) {
+    a.setAttr("href", target);
+    a.setAttr("target", "_blank");
+    a.setAttr("rel", "noopener noreferrer");
+    a.onclick = (ev) => {
+      ev.preventDefault();
+      window.open(target, "_blank", "noopener");
+    };
+    return;
+  }
+
+  a.onclick = (ev) => {
+    ev.preventDefault();
+    void app.workspace.openLinkText(target, "", false);
+  };
 }
 
 class DateModal extends Modal {
