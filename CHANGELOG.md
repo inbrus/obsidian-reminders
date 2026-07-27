@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0
+
+Feature release. Tags become first-class navigation, and you can jump straight into Taskgregator on startup.
+
+### Added
+- **All Tags folder in the navigator.** Under Lists there's a collapsible **All Tags** folder that rolls up every task carrying a `#tag`, treated just like a context folder. It shows a total badge, and each tag below it has its own count. Click a tag to open a list scoped to that tag; click the folder header for the combined view. Collapse it like any other node.
+- **Load Taskgregator on startup.** A new setting, **Load Taskgregator on startup** `[Disabled, Today, All, Flagged]`, opens the task list to the chosen view when the vault loads, so you land in your tasks instead of the last note.
+
+### Changed
+- **Inline `#tags` in task rows render as real tag pills.** A tag written in a task now shows with the same styling as tags everywhere else in Obsidian, and it's clickable. Clicking it opens that tag's list inside Taskgregator (in both the main view and the context sidebar). The small tag chip on the meta row stays.
+- **Markdown links render in task rows.** `[text](url)` in a task now renders as a clickable link instead of raw markdown. Thanks @maxbeizer ([#3](https://github.com/philpalmieri/taskgregator/pull/3)).
+
+### Notes
+- No data migration. Tasks remain plain markdown checkboxes; nothing about how tags or links are written changes.
+
 ## 2.1.0
 
 Feature release. Faster to find things, quicker to act on them in place, and cleaner on the page.

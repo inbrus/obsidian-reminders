@@ -11,6 +11,7 @@ export type Selection =
   | { type: "soon" }
   | { type: "all" }
   | { type: "flagged" }
+  | { type: "tags" }
   | { type: "smart"; tag: string; label: string }
   | { type: "node"; key: string; label: string };
 

@@ -55,6 +55,11 @@ export class TaskgregatorContextView extends ItemView {
       writer: this.deps.writer,
       reindexFile: this.deps.reindexFile,
       rerender: () => this.render(),
+      onTagClick: (tag: string) => {
+        this.deps.state.selection = { type: "smart", tag, label: "#" + tag };
+        void this.deps.openList();
+        this.deps.rerenderAll();
+      },
     };
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "taskgregator",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "A Things3-style aggregator for native Obsidian tasks.",
   "main": "main.js",
   "scripts": {

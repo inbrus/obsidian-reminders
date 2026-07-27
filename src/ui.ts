@@ -11,6 +11,9 @@ export interface TaskRowCtx {
   writer: TaskWriter;
   reindexFile: (path: string) => Promise<void>;
   rerender: () => void;
+  // Navigate to the in-plugin list for an inline #tag (host wires this to the
+  // shared selection). Omitted callers fall back to Obsidian global search.
+  onTagClick?: (tag: string) => void;
 }
 
 export function todayStr(): string {
@@ -40,7 +43,7 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   const body = row.createDiv({ cls: "tg-task-body" });
   const textEl = body.createDiv({ cls: "tg-task-text" });
   if (task.status === "done" || task.status === "cancelled") textEl.addClass("is-struck");
-  renderTextWithLinks(ctx.app, textEl, task.text, task.links);
+  renderTextWithLinks(ctx.app, textEl, task.text, task.links, ctx.onTagClick);
 
   // Meta row: context, dates, tags.
   const meta = body.createDiv({ cls: "tg-task-meta" });
@@ -173,19 +176,24 @@ export function renderTextWithLinks(
   app: App,
   el: HTMLElement,
   text: string,
-  _links: string[]
+  _links: string[],
+  onTagClick?: (tag: string) => void
 ): void {
-  // Render [[wikilinks]] and Markdown inline links as clickable links; rest as plain text.
-  const re = /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)/g;
+  // Render [[wikilinks]], Markdown inline links, and inline #tags as clickable
+  // links; rest as plain text. The tag pattern mirrors the parser's TAG_RE and
+  // uses a lookbehind so the preceding whitespace stays in the plain-text slice.
+  const re = /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)|(?<=^|\s)#([A-Za-z][\w\-/]*)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) el.appendText(text.slice(last, m.index));
 
-    if (m[1]) {
+    if (m[1] !== undefined) {
       renderWikilink(app, el, m[1]);
-    } else {
+    } else if (m[2] !== undefined) {
       renderMarkdownLink(app, el, m[2], m[3]);
+    } else if (m[4] !== undefined) {
+      renderTag(app, el, m[4], onTagClick);
     }
 
     last = m.index + m[0].length;
@@ -224,6 +232,34 @@ function renderMarkdownLink(app: App, el: HTMLElement, label: string, target: st
   a.onclick = (ev) => {
     ev.preventDefault();
     void app.workspace.openLinkText(target, "", false);
+  };
+}
+
+function renderTag(
+  app: App,
+  el: HTMLElement,
+  tagName: string,
+  onTagClick?: (tag: string) => void
+): void {
+  // Render as a native Obsidian tag pill (class "tag") so it matches how tags
+  // look in normal page renders. Clicking navigates to that tag's in-plugin
+  // list (via onTagClick); with no host callback we fall back to Obsidian's
+  // global search, like a native tag. The compact meta-row chip is untouched.
+  const a = el.createEl("a", { cls: "tag", text: "#" + tagName });
+  a.setAttr("href", "#" + tagName);
+  a.onclick = (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (onTagClick) {
+      onTagClick(tagName);
+      return;
+    }
+    const search = (app as unknown as {
+      internalPlugins?: {
+        getPluginById?: (id: string) => { instance?: { openGlobalSearch?: (q: string) => void } } | null;
+      };
+    }).internalPlugins?.getPluginById?.("global-search")?.instance;
+    search?.openGlobalSearch?.("tag:#" + tagName);
   };
 }
 

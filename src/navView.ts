@@ -94,6 +94,7 @@ export class TaskgregatorNavView extends ItemView {
         this.choose();
       });
     }
+    this.renderAllTags(lists);
 
     // Context tree.
     const tree = el.createDiv({ cls: "tg-section" });
@@ -144,6 +145,60 @@ export class TaskgregatorNavView extends ItemView {
       input.focus();
       const pos = caret ?? input.value.length;
       input.setSelectionRange(pos, pos);
+    }
+  }
+
+  /**
+   * "All Tags": a collapsible folder under Lists that treats every tag in use
+   * like a context folder. The header rolls up all tagged tasks and is itself
+   * selectable; each child is that tag's list. Collapse state lives under the
+   * reserved key "@tags".
+   */
+  private renderAllTags(parent: HTMLElement): void {
+    const tagCounts = this.deps.store.tagCounts();
+    if (tagCounts.length === 0) return;
+
+    const collapseKey = "@tags";
+    const isCollapsed = this.state.collapsed.has(collapseKey);
+    const rollup = this.deps.store.taggedTasks().length;
+    const active = this.state.selection.type === "tags";
+
+    const row = parent.createDiv({ cls: "tg-tree-row" + (active ? " is-active" : "") });
+    row.style.paddingLeft = "8px";
+
+    const twisty = row.createSpan({ cls: "tg-twisty" });
+    setIcon(twisty, isCollapsed ? "chevron-right" : "chevron-down");
+    twisty.onclick = (e) => {
+      e.stopPropagation();
+      if (isCollapsed) this.state.collapsed.delete(collapseKey);
+      else this.state.collapsed.add(collapseKey);
+      this.render();
+    };
+
+    const ic = row.createSpan({ cls: "tg-tree-icon" });
+    setIcon(ic, "tags");
+    row.createSpan({ cls: "tg-tree-label", text: "All Tags" });
+    row.createSpan({ cls: "tg-badge", text: String(rollup) });
+    row.onclick = () => {
+      this.state.selection = { type: "tags" };
+      this.choose();
+    };
+
+    if (isCollapsed) return;
+    for (const { tag, count } of tagCounts) {
+      const tagActive =
+        this.state.selection.type === "smart" && this.state.selection.tag === tag;
+      const child = parent.createDiv({ cls: "tg-tree-row" + (tagActive ? " is-active" : "") });
+      child.style.paddingLeft = 8 + 14 + "px";
+      child.createSpan({ cls: "tg-twisty tg-twisty-empty" });
+      const cic = child.createSpan({ cls: "tg-tree-icon" });
+      setIcon(cic, "hash");
+      child.createSpan({ cls: "tg-tree-label", text: "#" + tag });
+      child.createSpan({ cls: "tg-badge", text: String(count) });
+      child.onclick = () => {
+        this.state.selection = { type: "smart", tag, label: "#" + tag };
+        this.choose();
+      };
     }
   }
 

@@ -100,6 +100,11 @@ export class TaskgregatorView extends ItemView {
       writer: this.deps.writer,
       reindexFile: this.deps.reindexFile,
       rerender: () => this.render(),
+      onTagClick: (tag: string) => {
+        this.state.selection = { type: "smart", tag, label: "#" + tag };
+        void this.deps.openList();
+        this.deps.rerenderAll();
+      },
     };
   }
 
@@ -119,6 +124,8 @@ export class TaskgregatorView extends ItemView {
         };
       case "all":
         return { title: "All tasks", tasks: this.deps.store.visible() };
+      case "tags":
+        return { title: "All Tags", tasks: this.deps.store.taggedTasks() };
       case "smart":
         return { title: s.label, tasks: this.deps.store.tasksWithTag(s.tag) };
       case "node": {
