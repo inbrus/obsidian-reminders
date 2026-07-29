@@ -8,6 +8,7 @@ import {
   applyDueToLine,
   toggleTagInLine,
   ensureBlockIdInLine,
+  formatForLine,
   sidecarPathFor,
 } from "./writer";
 import { parseLine } from "./parser";
@@ -353,17 +354,19 @@ export default class Taskgregator extends Plugin {
       if (sub) {
         for (const [label, lvl] of levels) {
           sub.addItem((s) =>
-            s.setTitle(label).onClick(() =>
-              set(applyPriorityToLine(get(), lvl, this.settings.priorityTags))
-            )
+            s.setTitle(label).onClick(async () => {
+              const def = await this.writer.resolveDefaultFormat();
+              set(applyPriorityToLine(get(), lvl, this.settings.priorityTags, formatForLine(get(), def)));
+            })
           );
         }
       } else {
         // Fallback: single click cycles priority.
-        item.onClick(() => {
+        item.onClick(async () => {
           const cur = parseLine(get(), filePath, lineNo, this.settings)?.priority ?? 0;
           const c = cur >= 1 && cur <= 3 ? cur : cur > 3 ? 3 : 0;
-          set(applyPriorityToLine(get(), (c + 1) % 4, this.settings.priorityTags));
+          const def = await this.writer.resolveDefaultFormat();
+          set(applyPriorityToLine(get(), (c + 1) % 4, this.settings.priorityTags, formatForLine(get(), def)));
         });
       }
     });
@@ -374,7 +377,10 @@ export default class Taskgregator extends Plugin {
         .setIcon("calendar")
         .onClick(async () => {
           const d = await promptDate(this.app, "Due date");
-          if (d !== undefined) set(applyDueToLine(get(), d));
+          if (d !== undefined) {
+            const def = await this.writer.resolveDefaultFormat();
+            set(applyDueToLine(get(), d, formatForLine(get(), def)));
+          }
         })
     );
 

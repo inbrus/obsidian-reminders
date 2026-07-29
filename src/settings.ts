@@ -3,6 +3,10 @@ import type Taskgregator from "./main";
 
 export type StartupView = "disabled" | "today" | "all" | "flagged";
 
+// How Taskgregator writes task metadata. "auto" defers to the Tasks plugin's
+// configured format (falling back to emoji when Tasks isn't installed/readable).
+export type TaskFormatSetting = "auto" | "emoji" | "dataview";
+
 export interface SmartList {
   name: string;
   tag: string; // tag without leading '#'
@@ -34,6 +38,10 @@ export interface TaskgregatorSettings {
   startupView: StartupView;
   // "Soon" smart-list window in days (tasks due within the next N days).
   soonDays: number;
+  // Metadata format written to task lines. "auto" follows the Tasks plugin.
+  // Reading is always dual-format; this only affects lines with no existing
+  // metadata (existing emoji/dataview lines keep their own format).
+  taskFormat: TaskFormatSetting;
 }
 
 export const DEFAULT_SETTINGS: TaskgregatorSettings = {
@@ -54,6 +62,7 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
   enableContextSidebar: true,
   startupView: "disabled",
   soonDays: 7,
+  taskFormat: "auto",
 };
 
 export class TaskgregatorSettingTab extends PluginSettingTab {
@@ -125,6 +134,15 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
           options: { disabled: "Disabled", today: "Today", all: "All", flagged: "Flagged" },
         },
       },
+      {
+        name: "Task metadata format",
+        desc: "How new dates/priority are written. Auto follows the Tasks plugin (emoji if not installed). Reading always supports both.",
+        control: {
+          type: "dropdown",
+          key: "taskFormat",
+          options: { auto: "Auto (follow Tasks plugin)", emoji: "Emoji (Tasks)", dataview: "Dataview" },
+        },
+      },
     ];
   }
 
@@ -151,6 +169,8 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         return s.enableContextSidebar;
       case "startupView":
         return s.startupView;
+      case "taskFormat":
+        return s.taskFormat;
       default:
         return undefined;
     }
@@ -188,6 +208,9 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         break;
       case "startupView":
         s.startupView = normalizeStartupView(value);
+        break;
+      case "taskFormat":
+        s.taskFormat = normalizeTaskFormat(value);
         break;
       default:
         return;
@@ -326,6 +349,25 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Task metadata format")
+      .setDesc(
+        "How Taskgregator writes dates and priority on new/edited tasks. " +
+          "Auto follows the Tasks plugin's format (emoji if Tasks isn't installed). " +
+          "Reading always understands both emoji and Dataview; existing lines keep their own format."
+      )
+      .addDropdown((dd) =>
+        dd
+          .addOption("auto", "Auto (follow Tasks plugin)")
+          .addOption("emoji", "Emoji (Tasks)")
+          .addOption("dataview", "Dataview")
+          .setValue(this.plugin.settings.taskFormat)
+          .onChange(async (v) => {
+            this.plugin.settings.taskFormat = normalizeTaskFormat(v);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Reindex now")
       .setDesc("Rescan the vault for tasks.")
       .addButton((b) =>
@@ -339,6 +381,11 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
 function normalizeStartupView(value: unknown): StartupView {
   const v = String(value);
   return v === "today" || v === "all" || v === "flagged" ? v : "disabled";
+}
+
+function normalizeTaskFormat(value: unknown): TaskFormatSetting {
+  const v = String(value);
+  return v === "emoji" || v === "dataview" ? v : "auto";
 }
 
 function clampDays(value: unknown): number {

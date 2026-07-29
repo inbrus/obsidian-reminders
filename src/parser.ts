@@ -1,6 +1,13 @@
 import { App, TFile, TFolder } from "obsidian";
 import { RawTaskMeta, TaskItem, TaskStatus } from "./types";
 import { TaskgregatorSettings } from "./settings";
+import {
+  DV_KEYS,
+  readDvDate,
+  readDvField,
+  readDvPriority,
+  stripDataviewFields,
+} from "./dataview";
 
 const TASK_RE = /^(\s*)[-*+]\s+\[(.)\]\s?(.*)$/;
 
@@ -80,17 +87,23 @@ export function parseLine(
   if (bidMatch) blockId = bidMatch[1];
   body = body.replace(BLOCKID_RE, "");
 
-  // Metadata dates.
+  // Metadata dates. Emoji signifiers take precedence; Dataview inline fields
+  // ([due:: ...] / (due:: ...)) are read as a fallback so either format works.
   const meta: RawTaskMeta = {
-    due: dateAfter(body, EMOJI.due),
-    start: dateAfter(body, EMOJI.start),
-    scheduled: dateAfter(body, EMOJI.scheduled),
-    created: dateAfter(body, EMOJI.created),
-    doneDate: dateAfter(body, EMOJI.done),
-    cancelledDate: dateAfter(body, EMOJI.cancelled),
+    due: dateAfter(body, EMOJI.due) ?? readDvDate(body, DV_KEYS.due),
+    start: dateAfter(body, EMOJI.start) ?? readDvDate(body, DV_KEYS.start),
+    scheduled: dateAfter(body, EMOJI.scheduled) ?? readDvDate(body, DV_KEYS.scheduled),
+    created: dateAfter(body, EMOJI.created) ?? readDvDate(body, DV_KEYS.created),
+    doneDate: dateAfter(body, EMOJI.done) ?? readDvDate(body, DV_KEYS.completion),
+    cancelledDate:
+      dateAfter(body, EMOJI.cancelled) ?? readDvDate(body, DV_KEYS.cancelled),
   };
   const recMatch = body.match(new RegExp(EMOJI.recurrence + "\\s*([^📅🛫⏳➕✅❌🔺⏫🔼🔽⏬]+)", "u"));
   if (recMatch) meta.recurrence = recMatch[1].trim();
+  else {
+    const dvRepeat = readDvField(body, DV_KEYS.repeat);
+    if (dvRepeat) meta.recurrence = dvRepeat;
+  }
 
   // Tags.
   const tags: string[] = [];
@@ -100,7 +113,7 @@ export function parseLine(
     tags.push(tm[1]);
   }
 
-  // Priority: emoji first, then priority tags.
+  // Priority: emoji first, then Dataview [priority:: ...], then priority tags.
   let priority = 0;
   for (const [em, p] of Object.entries(PRIORITY_EMOJI)) {
     if (body.includes(em)) {
@@ -108,6 +121,7 @@ export function parseLine(
       break;
     }
   }
+  if (priority === 0) priority = readDvPriority(body);
   if (priority === 0) {
     for (let i = 0; i < settings.priorityTags.length; i++) {
       if (tags.includes(settings.priorityTags[i])) {
@@ -132,6 +146,9 @@ export function parseLine(
     text = text.replace(new RegExp(emoji, "g"), "");
   }
   for (const em of Object.keys(PRIORITY_EMOJI)) text = text.split(em).join("");
+  // Strip recognized Dataview task fields ([due:: ...] etc). Unrelated user
+  // inline fields (e.g. [effort:: 3]) are intentionally left in place.
+  text = stripDataviewFields(text);
   text = text.replace(/\s{2,}/g, " ").trim();
 
   // Bucket context from the path.

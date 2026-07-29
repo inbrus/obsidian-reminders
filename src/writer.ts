@@ -2,6 +2,14 @@ import { App, TFile, normalizePath } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskgregatorSettings } from "./settings";
 import { statusFromChar } from "./parser";
+import {
+  DV_KEYS,
+  NUM_TO_DV_PRIORITY,
+  TaskFormat,
+  hasDataviewField,
+  stripDvField,
+} from "./dataview";
+import { getTasksPluginFormat } from "./tasksInterop";
 
 export const EMOJI_DUE = "📅";
 export const EMOJI_START = "🛫";
@@ -11,7 +19,29 @@ const DATE_G = "\\d{4}-\\d{2}-\\d{2}";
 // Tasks-plugin priority signifiers, highest first. Index 0 => level 1.
 const PRIORITY_EMOJI = ["🔺", "⏫", "🔼"];
 const ALL_PRIORITY_EMOJI = ["🔺", "⏫", "🔼", "🔽", "⏬"];
+// Emoji signifiers used to detect whether a line already uses the emoji format.
+const DETECT_EMOJI = ["📅", "🛫", "⏳", "➕", "✅", "❌", "🔁", ...ALL_PRIORITY_EMOJI];
 const CHECKBOX_RE = /^(\s*[-*+]\s+\[)(.)(\])/;
+
+/**
+ * Decide which format to use when editing a specific line. A line that already
+ * carries emoji signifiers stays emoji; a line that already carries Dataview
+ * fields stays Dataview; a line with no recognized metadata uses `fallback`
+ * (the user's configured / Tasks-plugin default). This keeps every existing
+ * line in its original style and never mixes the two.
+ */
+export function formatForLine(line: string, fallback: TaskFormat): TaskFormat {
+  if (DETECT_EMOJI.some((e) => line.includes(e))) return "emoji";
+  if (hasDataviewField(line)) return "dataview";
+  return fallback;
+}
+
+/** Append/replace a Dataview date field, preserving a trailing block id. */
+function setDvDateField(line: string, key: string, date: string | null): string {
+  const stripped = stripDvField(line, key);
+  if (!date) return stripped;
+  return appendSignifier(stripped, `[${key}:: ${date}]`);
+}
 
 export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -54,39 +84,76 @@ function setDateSignifier(line: string, emoji: string, date: string | null): str
 
 // --- Pure line transforms (usable on raw strings, editor lines, or via vault) ---
 
-export function applyStatusToLine(line: string, statusChar: string): string {
+export function applyStatusToLine(
+  line: string,
+  statusChar: string,
+  format: TaskFormat = "emoji"
+): string {
   let out = line.replace(CHECKBOX_RE, `$1${statusChar}$3`);
   const status = statusFromChar(statusChar);
+  // Clear any existing done/cancelled dates in BOTH formats, then re-add in the
+  // target format so a status change never leaves a stale/duplicate date.
   out = stripDateSignifier(out, EMOJI_DONE);
   out = stripDateSignifier(out, EMOJI_CANCELLED);
-  if (status === "done") out = appendSignifier(out, `${EMOJI_DONE} ${todayStr()}`);
-  if (status === "cancelled") out = appendSignifier(out, `${EMOJI_CANCELLED} ${todayStr()}`);
+  out = stripDvField(out, DV_KEYS.completion);
+  out = stripDvField(out, DV_KEYS.cancelled);
+  if (status === "done") {
+    out =
+      format === "dataview"
+        ? appendSignifier(out, `[${DV_KEYS.completion}:: ${todayStr()}]`)
+        : appendSignifier(out, `${EMOJI_DONE} ${todayStr()}`);
+  }
+  if (status === "cancelled") {
+    out =
+      format === "dataview"
+        ? appendSignifier(out, `[${DV_KEYS.cancelled}:: ${todayStr()}]`)
+        : appendSignifier(out, `${EMOJI_CANCELLED} ${todayStr()}`);
+  }
   return out;
 }
 
 export function applyPriorityToLine(
   line: string,
   priority: number,
-  priorityTags: string[]
+  priorityTags: string[],
+  format: TaskFormat = "emoji"
 ): string {
   let out = line;
   for (const tag of priorityTags) {
     out = out.replace(new RegExp(`(?:^|\\s)#${tag}\\b`, "g"), "");
   }
+  // Clear priority in both formats before re-applying.
   for (const em of ALL_PRIORITY_EMOJI) out = out.split(em).join("");
+  out = stripDvField(out, DV_KEYS.priority);
   out = out.replace(/\s{2,}/g, " ").trimEnd();
-  if (priority >= 1 && priority <= PRIORITY_EMOJI.length) {
+  if (priority < 1) return out;
+  if (format === "dataview") {
+    const word = NUM_TO_DV_PRIORITY[priority];
+    if (word) out = appendSignifier(out, `[${DV_KEYS.priority}:: ${word}]`);
+  } else if (priority <= PRIORITY_EMOJI.length) {
     out = appendSignifier(out, PRIORITY_EMOJI[priority - 1]);
   }
   return out;
 }
 
-export function applyDueToLine(line: string, date: string | null): string {
-  return setDateSignifier(line, EMOJI_DUE, date);
+export function applyDueToLine(
+  line: string,
+  date: string | null,
+  format: TaskFormat = "emoji"
+): string {
+  return format === "dataview"
+    ? setDvDateField(line, DV_KEYS.due, date)
+    : setDateSignifier(line, EMOJI_DUE, date);
 }
 
-export function applyStartToLine(line: string, date: string | null): string {
-  return setDateSignifier(line, EMOJI_START, date);
+export function applyStartToLine(
+  line: string,
+  date: string | null,
+  format: TaskFormat = "emoji"
+): string {
+  return format === "dataview"
+    ? setDvDateField(line, DV_KEYS.start, date)
+    : setDateSignifier(line, EMOJI_START, date);
 }
 
 export function toggleTagInLine(line: string, tag: string): string {
@@ -147,8 +214,22 @@ export class TaskWriter {
     });
   }
 
+  /**
+   * Resolve the fallback format for lines that carry no metadata yet, from the
+   * user's `taskFormat` setting. "auto" defers to the Tasks plugin's configured
+   * format when available, otherwise emoji (Taskgregator's historical default).
+   */
+  async resolveDefaultFormat(): Promise<TaskFormat> {
+    const pref = this.settings.taskFormat;
+    if (pref === "emoji" || pref === "dataview") return pref;
+    return (await getTasksPluginFormat(this.app)) ?? "emoji";
+  }
+
   async setStatus(task: TaskItem, statusChar: string): Promise<void> {
-    await this.editLine(task, (line) => applyStatusToLine(line, statusChar));
+    const def = await this.resolveDefaultFormat();
+    await this.editLine(task, (line) =>
+      applyStatusToLine(line, statusChar, formatForLine(line, def))
+    );
   }
 
   async toggleDone(task: TaskItem): Promise<void> {
@@ -157,16 +238,23 @@ export class TaskWriter {
   }
 
   async setDue(task: TaskItem, date: string | null): Promise<void> {
-    await this.editLine(task, (line) => applyDueToLine(line, date));
+    const def = await this.resolveDefaultFormat();
+    await this.editLine(task, (line) =>
+      applyDueToLine(line, date, formatForLine(line, def))
+    );
   }
 
   async setStart(task: TaskItem, date: string | null): Promise<void> {
-    await this.editLine(task, (line) => applyStartToLine(line, date));
+    const def = await this.resolveDefaultFormat();
+    await this.editLine(task, (line) =>
+      applyStartToLine(line, date, formatForLine(line, def))
+    );
   }
 
   async setPriority(task: TaskItem, priority: number): Promise<void> {
+    const def = await this.resolveDefaultFormat();
     await this.editLine(task, (line) =>
-      applyPriorityToLine(line, priority, this.settings.priorityTags)
+      applyPriorityToLine(line, priority, this.settings.priorityTags, formatForLine(line, def))
     );
   }
 
