@@ -2,10 +2,6 @@
 
 ## 2.3.1
 
-Docs release. Adds the changelog entry that 2.3.0 shipped without. No functional changes.
-
-## 2.3.0
-
 Feature release. Taskgregator now speaks both task metadata dialects, so it fits whichever one you (and the Tasks plugin) already use. Requested in [#1](https://github.com/philpalmieri/obsidian-taskgregator/issues/1).
 
 ### Added
