@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.3.1
+
+Docs release. Adds the changelog entry that 2.3.0 shipped without. No functional changes.
+
+## 2.3.0
+
+Feature release. Taskgregator now speaks both task metadata dialects, so it fits whichever one you (and the Tasks plugin) already use. Requested in [#1](https://github.com/philpalmieri/obsidian-taskgregator/issues/1).
+
+### Added
+- **Dataview inline-field format support.** Taskgregator reads task metadata written as Dataview inline fields (`[due:: 2026-07-29]`, `[priority:: high]`, `[start:: ]`, `[scheduled:: ]`, `[completion:: ]`, `[cancelled:: ]`, `[repeat:: ]`) in addition to the Tasks-plugin emoji signifiers (📅 ⏳ 🛫 🔺 ⏫ 🔼 ✅ ❌ 🔁). Dates, priority, recurrence, and done/cancelled state now populate from either dialect, so every smart list, filter, sort, and grouping works the same regardless of how a task was written.
+- **"Task metadata format" setting** `[Auto, Emoji, Dataview]` (default **Auto**). Controls the format Taskgregator *writes* when you set a date or priority from the right-click menus. **Auto** follows the Tasks plugin's own configured format (loosely coupled by reading its saved setting), falling back to emoji when Tasks isn't installed.
+
+### Changed
+- **Writing preserves each line's existing format.** An emoji task stays emoji and a Dataview task stays Dataview when you edit it; only a task with no metadata yet uses your chosen format. You never get a line with the two dialects mixed together.
+
+### Notes
+- Non-breaking. Reading is purely additive, and existing emoji users on the default Auto setting get byte-identical output. Tasks remain plain markdown checkboxes; nothing about existing lines changes until you edit them.
+
 ## 2.2.1
 
 Compliance fix for the community-plugin review. No functional changes.
