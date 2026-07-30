@@ -111,6 +111,8 @@ export class TaskgregatorView extends ItemView {
   private currentTasks(): { title: string; tasks: TaskItem[] } {
     const s: Selection = this.state.selection;
     switch (s.type) {
+      case "overdue":
+        return { title: "Overdue", tasks: this.deps.store.overdue() };
       case "today":
         return { title: "Today", tasks: this.deps.store.dueToday() };
       case "tomorrow":
@@ -161,7 +163,9 @@ export class TaskgregatorView extends ItemView {
 
     this.renderControls(el);
 
-    const sorted = sortTasksBy(tasks, this.state.sortBy);
+    const key = this.state.sortExplicit ? this.state.sortBy : "priority";
+    const dir = this.state.sortExplicit ? this.state.sortDir : "asc";
+    const sorted = sortTasksBy(tasks, key, dir);
     const list = el.createDiv({ cls: "tg-list" });
 
     if (this.state.groupBy === "none") {
@@ -194,32 +198,68 @@ export class TaskgregatorView extends ItemView {
 
   private renderControls(el: HTMLElement): void {
     const bar = el.createDiv({ cls: "tg-controls" });
-
-    const sortWrap = bar.createDiv({ cls: "tg-control" });
-    sortWrap.createSpan({ cls: "tg-control-label", text: "Sort" });
-    const sortSel = sortWrap.createEl("select", { cls: "tg-select" });
-    for (const [val, label] of SORT_OPTIONS) {
-      const opt = sortSel.createEl("option", { text: label });
-      opt.value = val;
-      if (val === this.state.sortBy) opt.selected = true;
-    }
-    sortSel.onchange = () => {
-      this.state.sortBy = sortSel.value as SortKey;
+    this.renderSortRow(bar);
+    this.renderPillRow(bar, "Group", GROUP_OPTIONS, this.state.groupBy, (v) => {
+      this.state.groupBy = v;
       this.renderMain();
-    };
+    });
+  }
 
-    const groupWrap = bar.createDiv({ cls: "tg-control" });
-    groupWrap.createSpan({ cls: "tg-control-label", text: "Group" });
-    const groupSel = groupWrap.createEl("select", { cls: "tg-select" });
-    for (const [val, label] of GROUP_OPTIONS) {
-      const opt = groupSel.createEl("option", { text: label });
-      opt.value = val;
-      if (val === this.state.groupBy) opt.selected = true;
+  /** Sort row: tri-state pills. Click cycles asc → desc → off (default order). */
+  private renderSortRow(parent: HTMLElement): void {
+    const s = this.state;
+    const row = parent.createDiv({ cls: "tg-pillrow" });
+    row.createSpan({ cls: "tg-pillrow-label", text: "Sort" });
+    for (const [val, text] of SORT_OPTIONS) {
+      const active = s.sortExplicit && s.sortBy === val;
+      const pill = row.createDiv({ cls: "tg-pill" + (active ? " is-active" : "") });
+      pill.createSpan({ text });
+      if (active) {
+        pill.createSpan({ cls: "tg-pill-dir", text: s.sortDir === "asc" ? "↑" : "↓" });
+      }
+      pill.onclick = () => {
+        this.cycleSort(val);
+        this.renderMain();
+      };
     }
-    groupSel.onchange = () => {
-      this.state.groupBy = groupSel.value as GroupKey;
-      this.renderMain();
-    };
+  }
+
+  /** Advance a sort pill through asc → desc → off (reset to default order). */
+  private cycleSort(key: SortKey): void {
+    const s = this.state;
+    if (!s.sortExplicit || s.sortBy !== key) {
+      s.sortExplicit = true;
+      s.sortBy = key;
+      s.sortDir = "asc";
+    } else if (s.sortDir === "asc") {
+      s.sortDir = "desc";
+    } else {
+      s.sortExplicit = false;
+      s.sortBy = "priority";
+      s.sortDir = "asc";
+    }
+  }
+
+  /** A labeled row of small clickable pills (used for Sort and Group). */
+  private renderPillRow<T extends string>(
+    parent: HTMLElement,
+    label: string,
+    options: [T, string][],
+    active: T,
+    onPick: (val: T) => void
+  ): void {
+    const row = parent.createDiv({ cls: "tg-pillrow" });
+    row.createSpan({ cls: "tg-pillrow-label", text: label });
+    for (const [val, text] of options) {
+      const pill = row.createDiv({
+        cls: "tg-pill" + (active === val ? " is-active" : ""),
+      });
+      pill.setText(text);
+      pill.onclick = () => {
+        if (active === val) return;
+        onPick(val);
+      };
+    }
   }
 
   private renderTaskRow(parent: HTMLElement, task: TaskItem): void {
@@ -227,7 +267,7 @@ export class TaskgregatorView extends ItemView {
   }
 }
 
-function sortTasksBy(tasks: TaskItem[], key: SortKey): TaskItem[] {
+function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc" = "asc"): TaskItem[] {
   const byPrio = (a: TaskItem, b: TaskItem) => (a.priority || 99) - (b.priority || 99);
   const byText = (a: TaskItem, b: TaskItem) => a.text.localeCompare(b.text);
   const byDue = (a: TaskItem, b: TaskItem) => {
@@ -242,6 +282,7 @@ function sortTasksBy(tasks: TaskItem[], key: SortKey): TaskItem[] {
   };
   const byRef = (a: TaskItem, b: TaskItem) => refKey(a).localeCompare(refKey(b));
 
+  const mult = dir === "desc" ? -1 : 1;
   return tasks.slice().sort((a, b) => {
     let c = 0;
     switch (key) {
@@ -262,7 +303,7 @@ function sortTasksBy(tasks: TaskItem[], key: SortKey): TaskItem[] {
         c = byPrio(a, b) || byDue(a, b) || byText(a, b);
         break;
     }
-    return c;
+    return c * mult;
   });
 }
 

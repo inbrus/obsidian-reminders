@@ -4,6 +4,9 @@ import { TaskStore } from "./store";
 
 export type ContextScope = "all" | "page" | "section" | "reference";
 
+// Due-date filter applied on top of the active scope in the context sidebar.
+export type DueFilter = "all" | "overdue" | "today" | "soon";
+
 export interface ContextResult {
   title: string;
   subtitle: string;

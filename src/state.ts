@@ -2,10 +2,12 @@
 // Both views read/write the same instance so a selection made in the nav is
 // reflected by the list, and sort/group/collapse survive re-renders.
 
+import { ContextScope, DueFilter } from "./context";
+
 export type SortKey = "priority" | "due" | "start" | "reference" | "title";
 export type GroupKey = "none" | "priority" | "due" | "reference";
-
 export type Selection =
+  | { type: "overdue" }
   | { type: "today" }
   | { type: "tomorrow" }
   | { type: "soon" }
@@ -22,5 +24,13 @@ export class TaskgregatorState {
   // Context-tree node keys the user has collapsed.
   collapsed: Set<string> = new Set();
   sortBy: SortKey = "priority";
+  // Sort direction and whether the user explicitly chose a sort. When not
+  // explicit, the list falls back to the default order (priority, natural).
+  sortDir: "asc" | "desc" = "asc";
+  sortExplicit = false;
   groupBy: GroupKey = "none";
+  // Context sidebar (right panel) selections. Persist for the session so the
+  // panel doesn't reset when the active file changes or the leaf reloads.
+  contextTab: ContextScope = "all";
+  contextDueFilter: DueFilter = "all";
 }
