@@ -62,6 +62,12 @@ export class TaskgregatorNavView extends ItemView {
     this.renderSearch(el, keepFocus, caret);
 
     const smart = el.createDiv({ cls: "tg-section" });
+    if (c.overdue > 0) {
+      this.sideItem(smart, "alert-triangle", "Overdue", c.overdue, this.state.selection.type === "overdue", () => {
+        this.state.selection = { type: "overdue" };
+        this.choose();
+      }, { alert: true });
+    }
     this.sideItem(smart, "star", "Today", c.today, this.state.selection.type === "today", () => {
       this.state.selection = { type: "today" };
       this.choose();
@@ -247,9 +253,12 @@ export class TaskgregatorNavView extends ItemView {
     label: string,
     count: number,
     active: boolean,
-    onClick: () => void
+    onClick: () => void,
+    opts?: { alert?: boolean }
   ): void {
-    const row = parent.createDiv({ cls: "tg-side-item" + (active ? " is-active" : "") });
+    const row = parent.createDiv({
+      cls: "tg-side-item" + (active ? " is-active" : "") + (opts?.alert ? " is-alert" : ""),
+    });
     const ic = row.createSpan({ cls: "tg-tree-icon" });
     setIcon(ic, icon);
     row.createSpan({ cls: "tg-tree-label", text: label });

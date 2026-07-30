@@ -200,10 +200,16 @@ export class TaskStore {
       .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }
 
-  /** Tasks due on/before today (Today smart list core). */
+  /** Tasks due before today (Overdue smart list core). */
+  overdue(): TaskItem[] {
+    const today = this.dayOffset(0);
+    return this.visible().filter((t) => t.meta.due && t.meta.due < today);
+  }
+
+  /** Tasks due exactly today (Today smart list core). */
   dueToday(): TaskItem[] {
     const today = this.dayOffset(0);
-    return this.visible().filter((t) => t.meta.due && t.meta.due <= today);
+    return this.visible().filter((t) => t.meta.due === today);
   }
 
   /** Tasks due tomorrow. */
@@ -230,6 +236,7 @@ export class TaskStore {
     const v = this.visible();
     return {
       total: v.length,
+      overdue: this.overdue().length,
       today: this.dueToday().length,
       tomorrow: this.dueTomorrow().length,
       soon: this.dueSoon().length,
