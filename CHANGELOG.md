@@ -6,12 +6,20 @@ Feature release. Overdue work gets its own home, and the right-panel and main-li
 
 ### Added
 - **Overdue smart list.** A dedicated **Overdue** list now sits at the top of the navigator with an alert-triangle icon and a red count badge, holding every visible open task whose due date is before today. It auto-hides when nothing is overdue, so it only shows up when it's actionable.
+
+![Overdue smart list at the top of the navigator](assets/2.4.0/2.4.0-overdue.png)
+
 - **Due-date filter in the context sidebar.** The right-hand panel gains a subtle `All · Overdue · Today · Soon` filter above the scope tabs. It narrows the current scope (Page/Section/Reference) by due window, and dims windows with nothing in them. Your choice persists for the session and doesn't reset when you switch notes or reopen the panel.
+
+![All / Overdue / Today / Soon due filter above the context sidebar tabs](assets/2.4.0/2.4.0-filter-sidebar.png)
 
 ### Changed
 - **Today means today.** The **Today** smart list now holds only tasks due exactly today. Overdue tasks moved to their own list instead of inflating the Today count. Their red due-date chip is unchanged.
 - **Sort and Group controls are now pills.** The main list view swaps the two dropdowns for two aligned rows of small clickable pills, matching the context sidebar's style.
 - **Tri-state sorting.** Clicking a Sort pill cycles ascending (`↑`) → descending (`↓`) → off, where off returns to the default priority order. Only one sort is active at a time. Group stays a single-select.
+
+![Pill-based Sort and Group controls on the main list](assets/2.4.0/2.4.0-sortandfilter-main.png)
+
 - **Context sidebar defaults to All scope** and remembers your scope + due-filter selections for the session.
 
 ## 2.3.1

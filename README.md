@@ -38,11 +38,15 @@ A search box at the top of the navigator filters tasks as you type. It scopes to
 
 ### The task list
 
-Group by project, sort by whatever you care about, and jump straight back to the source note from any card (shown above). Right-click any row for the same quick actions you get in the editor: priority, dates, `#today`, detail note, or cancel.
+Group by project, sort by whatever you care about, and jump straight back to the source note from any card (shown above). **Sort** and **Group** are two rows of small pills; Sort pills are tri-state (click to cycle ascending → descending → off, back to the default priority order), and Group is single-select. Right-click any row for the same quick actions you get in the editor: priority, dates, `#today`, detail note, or cancel.
+
+![Pill-based Sort and Group controls on the Overdue list](assets/2.4.0/2.4.0-sortandfilter-main.png)
 
 ### The context sidebar
 
-While you're writing a note, the right sidebar shows that note's tasks, so you never lose track of what a page owns.
+While you're writing a note, the right sidebar shows that note's tasks, so you never lose track of what a page owns. A subtle `All · Overdue · Today · Soon` due filter sits above the scope tabs and narrows the current scope by due window (windows with nothing in them are dimmed). Your scope and filter choices stick for the session.
+
+![All / Overdue / Today / Soon due filter above the context sidebar tabs](assets/2.4.0/2.4.0-filter-sidebar.png)
 
 **Page** shows the tasks written on the note in front of you.
 
@@ -68,13 +72,16 @@ Because Taskgregator understands your task lines, you get a context menu on any 
 - **Search** across the current scope. Type in the navigator's search box to filter the selected list; the filter follows you as you switch lists so you can search the same term anywhere.
 - **Cross-indexing by wikilink.** A task that links `[[People/Alex]]` appears under Alex's node even though it was authored elsewhere.
 - **Context sidebar** that follows the active note and scopes its tasks by Page, Section (folder subtree / folder note), or Reference.
-- **Date smart lists**: Today (due on/before today), **Tomorrow**, and **Soon** (due within a configurable window, default 7 days). Plus Flagged (by priority) and All.
+- **Date smart lists**: **Overdue** (past due, auto-hides when empty), **Today** (due exactly today), **Tomorrow**, and **Soon** (due within a configurable window, default 7 days). Plus Flagged (by priority) and All.
+
+![Navigator smart lists, including a red Overdue badge](assets/2.4.0/2.4.0-overdue.png)
 - **Tag smart lists** driven by tags: Follow-up, Snippet Ideas, Someday, and any others you configure.
 - **Inline editing** from the panel: toggle done/cancelled, cycle priority, set due/start dates, add tags, jump to source, all written back to the original markdown line. Right-click a row for the full menu.
-- **Priority** using Tasks-plugin emoji signifiers (🔺 ⏫ 🔼) so it stays compatible with what you already use.
+- **Priority** using Tasks-plugin emoji signifiers (🔺 ⏫ 🔼) or Dataview `[priority:: high]` fields, so it stays compatible with whatever you already use.
+- **Reads both task dialects.** Understands Tasks-plugin emoji metadata *and* Dataview inline fields (`[due:: ]`, `[priority:: ]`, etc.), so every smart list, filter, sort, and grouping works no matter how a task was written. When it writes back it follows your **Task metadata format** setting (Auto follows the Tasks plugin) and keeps each existing line in its own format.
 - **Per-task detail notes (sidecars).** Optionally attach a full markdown note to any task for extended context, links, and history. The task gets a lightweight block id (`^id`) only when you enrich it, and the sidecar backlinks to the source line. The raw id is hidden on the page: it shows as a small 📝 note icon in both Reading view and Live Preview (click to open; put your cursor on the line to reveal the id). A 📝 chip on the card opens it too.
 - **Native right-click menu** on task lines across your whole vault, and on rows inside the panel.
-- **Self-contained.** Reads and writes markdown directly. No dependency on Dataview or the Tasks plugin at runtime. Works on desktop and mobile.
+- **Self-contained.** Reads and writes markdown directly, with no runtime dependency on Dataview or the Tasks plugin (when you pick Auto it only *reads* the Tasks plugin's saved format preference). Works on desktop and mobile.
 
 ## Task format
 
@@ -105,6 +112,19 @@ Recognized signifiers:
 | `[[link]]` | Cross-index target |
 | `^blockid` | Stable identity, added lazily when you attach a note (hidden on the page, shown as a 📝 icon) |
 
+### Dataview inline fields
+
+If you (or the Tasks plugin) write metadata as Dataview inline fields instead of emoji, Taskgregator reads those too, so both styles work interchangeably in every list, filter, sort, and grouping:
+
+```markdown
+- [ ] With dataview metadata [due:: 2026-07-01] [start:: 2026-06-25] [priority:: medium] #followup
+- [x] Done [completion:: 2026-06-30]
+```
+
+Recognized fields: `[due:: ]`, `[start:: ]`, `[scheduled:: ]`, `[created:: ]`, `[completion:: ]` (done date), `[cancelled:: ]`, `[repeat:: ]`, and `[priority:: highest|high|medium|low|lowest]`.
+
+When Taskgregator *writes* a date or priority, the **Task metadata format** setting decides the style: **Auto** (default) follows the Tasks plugin's own configured format, falling back to emoji when Tasks isn't installed; you can also force **Emoji** or **Dataview**. Either way, a line that already carries metadata keeps its existing format, so the two styles never get mixed on one line.
+
 ## Usage
 
 - The **navigator** opens in the left sidebar (its ✓✓ tab sits next to Files and Search). You can also run **Taskgregator: Open panel** from the command palette.
@@ -123,6 +143,7 @@ Recognized signifiers:
 - **Smart lists**: cross-cutting tag lists (`Name:tag` pairs).
 - **Detail-note folder**: where sidecars are stored (default `Taskgregator/tasksData`).
 - **Soon window (days)**: how many days ahead the **Soon** smart list looks (default 7).
+- **Task metadata format**: how Taskgregator writes dates and priority: **Auto** (follow the Tasks plugin, emoji if it isn't installed), **Emoji**, or **Dataview**. Reading always understands both.
 - **Show completed tasks**: include done/cancelled tasks in the index.
 - **Context sidebar**: enable the right-sidebar panel that follows the active note.
 
