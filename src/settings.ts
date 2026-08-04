@@ -142,7 +142,7 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
       },
       {
         name: "Show changelog on update",
-        desc: "Pop a What's New window the first time the plugin loads after an update.",
+        desc: "Show the changelog automatically the first time the plugin loads after an update.",
         control: { type: "toggle", key: "showChangelogOnUpdate" },
       },
       {
@@ -376,7 +376,7 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Show changelog on update")
-      .setDesc("Pop a What's New window the first time the plugin loads after an update.")
+      .setDesc("Show the changelog automatically the first time the plugin loads after an update.")
       .addToggle((tg) =>
         tg.setValue(this.plugin.settings.showChangelogOnUpdate).onChange(async (v) => {
           this.plugin.settings.showChangelogOnUpdate = v;
