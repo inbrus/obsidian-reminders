@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.5.0
+
+Feature release. Old, still-open work stops slipping through the cracks, and you can now sort by when a task was created everywhere it matters.
+
+### Added
+- **Aging smart list.** A new **Aging** list sits under **Soon** in the navigator (hourglass icon), holding every still-open task created a configurable number of days ago or older. It surfaces stale work that's been sitting around regardless of its due date, so nothing quietly rots. Tasks with no created date are excluded (there's no age to measure).
+
+![Aging smart list in the navigator](https://raw.githubusercontent.com/philpalmieri/obsidian-taskgregator/main/assets/2.5.0/aging.png)
+
+- **Aging threshold setting.** A new **Aging threshold (days)** setting controls how old a task must be to count as aging (default 14). Set it to 7 for a tighter "older than a week" view, or higher for a looser one.
+
+- **Sort by Created, everywhere.** The main list gains an **Age** sort pill (by created date) alongside the existing ones, and the context sidebar gains its own tri-state sort row with **Priority · Due · Start · Age**, aligned with the filter and scope-tab rows. All cycle ascending (`↑`) → descending (`↓`) → off. Created dates are read from both the `➕` emoji and the `[created:: …]` Dataview inline field, so sorting works whichever format your tasks use.
+
+![Priority / Due / Start / Age sort row in the context sidebar](https://raw.githubusercontent.com/philpalmieri/obsidian-taskgregator/main/assets/2.5.0/aging-sidebar.png)
+
+- **Age chip on every task.** Tasks with a created date now show a small `🌱` age chip (`Today`, `1 Day`, `25 Days`, …) in the meta row across all views. It stays a quiet grey until the task hits the aging threshold, then turns a warning color so stale work stands out at a glance.
+
 ## 2.4.0
 
 Feature release. Overdue work gets its own home, and the right-panel and main-list controls get a lighter, more consistent touch. Overdue list requested in [#4](https://github.com/philpalmieri/obsidian-taskgregator/issues/4).

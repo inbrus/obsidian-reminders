@@ -80,6 +80,10 @@ export class TaskgregatorNavView extends ItemView {
       this.state.selection = { type: "soon" };
       this.choose();
     });
+    this.sideItem(smart, "hourglass", "Aging", c.aging, this.state.selection.type === "aging", () => {
+      this.state.selection = { type: "aging" };
+      this.choose();
+    });
     this.sideItem(smart, "flag", "Flagged", c.flagged, this.state.selection.type === "flagged", () => {
       this.state.selection = { type: "flagged" };
       this.choose();

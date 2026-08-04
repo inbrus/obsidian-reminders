@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from "obsidian";
-import { ViewDeps } from "./view";
+import { ViewDeps, sortTasksBy } from "./view";
 import { computeContext, ContextScope, DueFilter } from "./context";
+import { SortKey } from "./state";
 import { TaskItem } from "./types";
 import { TaskRowCtx, renderTaskRow } from "./ui";
 
@@ -19,6 +20,14 @@ const DUE_FILTERS: [DueFilter, string][] = [
   ["overdue", "Overdue"],
   ["today", "Today"],
   ["soon", "Soon"],
+];
+
+// Sort options for the context sidebar (tri-state, one active at a time).
+const SORT_OPTIONS: [SortKey, string][] = [
+  ["priority", "Priority"],
+  ["due", "Due"],
+  ["start", "Start"],
+  ["created", "Age"],
 ];
 
 /**
@@ -70,11 +79,36 @@ export class TaskgregatorContextView extends ItemView {
     return tasks.filter((t) => t.meta.due && t.meta.due > today && t.meta.due <= endStr);
   }
 
+  /** Apply the active sidebar sort, if any (else keep natural scope order). */
+  private applySort(tasks: TaskItem[]): TaskItem[] {
+    const s = this.deps.state;
+    if (!s.contextSortExplicit) return tasks;
+    return sortTasksBy(tasks, s.contextSortBy, s.contextSortDir);
+  }
+
+  /** Tri-state cycle for a sidebar sort key: asc -> desc -> off. */
+  private cycleSort(key: SortKey): void {
+    const s = this.deps.state;
+    if (!s.contextSortExplicit || s.contextSortBy !== key) {
+      s.contextSortExplicit = true;
+      s.contextSortBy = key;
+      s.contextSortDir = "asc";
+    } else if (s.contextSortDir === "asc") {
+      s.contextSortDir = "desc";
+    } else {
+      s.contextSortExplicit = false;
+      s.contextSortBy = "priority";
+      s.contextSortDir = "asc";
+    }
+    this.render();
+  }
+
   private rowCtx(): TaskRowCtx {    return {
       app: this.app,
       writer: this.deps.writer,
       reindexFile: this.deps.reindexFile,
       rerender: () => this.render(),
+      agingDays: this.deps.settings.agingDays,
       onTagClick: (tag: string) => {
         this.deps.state.selection = { type: "smart", tag, label: "#" + tag };
         void this.deps.openList();
@@ -122,6 +156,20 @@ export class TaskgregatorContextView extends ItemView {
       };
     }
 
+    // Tri-state sort row (Priority · Due · Start · Age). Styled to line up with
+    // the due-filter and scope-tab rows above/below it. Click cycles a key
+    // asc (↑) -> desc (↓) -> off (natural scope order).
+    const sortRow = root.createDiv({ cls: "tg-context-sort" });
+    for (const [key, label] of SORT_OPTIONS) {
+      const active = state.contextSortExplicit && state.contextSortBy === key;
+      const seg = sortRow.createDiv({ cls: "tg-context-sort-seg" + (active ? " is-active" : "") });
+      seg.createSpan({ text: label });
+      if (active) {
+        seg.createSpan({ cls: "tg-pill-dir", text: state.contextSortDir === "asc" ? "↑" : "↓" });
+      }
+      seg.onclick = () => this.cycleSort(key);
+    }
+
     // Subtle filter tabs.
     const tabs = root.createDiv({ cls: "tg-tabs" });
     for (const [scope, label] of TABS) {
@@ -138,7 +186,7 @@ export class TaskgregatorContextView extends ItemView {
       };
     }
 
-    const tasks = this.filterByDue(scopeTasks, state.contextDueFilter);
+    const tasks = this.applySort(this.filterByDue(scopeTasks, state.contextDueFilter));
     if (tasks.length === 0) {
       root.createDiv({ cls: "tg-empty", text: "Nothing in this view." });
       return;

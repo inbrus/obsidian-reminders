@@ -18,6 +18,7 @@ import { TaskgregatorState } from "./state";
 import { promptDate } from "./ui";
 import { TaskgregatorContextView, VIEW_TYPE_TASKGREGATOR_CONTEXT } from "./contextView";
 import { noteIconLivePreview } from "./livePreview";
+import { maybeShowChangelog, openChangelog } from "./changelog";
 
 export default class Taskgregator extends Plugin {
   settings!: TaskgregatorSettings;
@@ -84,6 +85,12 @@ export default class Taskgregator extends Plugin {
       callback: () => this.reindex(),
     });
 
+    this.addCommand({
+      id: "whats-new",
+      name: "Show what's new",
+      callback: () => openChangelog(this),
+    });
+
     this.addSettingTab(new TaskgregatorSettingTab(this.app, this));
 
     // In reading view, replace the raw block-id on a task that has a detail note
@@ -148,6 +155,7 @@ export default class Taskgregator extends Plugin {
         await this.activateView();
       }
       this.refreshViews();
+      void maybeShowChangelog(this);
     });
   }
 

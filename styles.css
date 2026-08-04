@@ -248,6 +248,8 @@
 .taskgregator .tg-chip.tg-ctx { cursor: pointer; }
 .taskgregator .tg-chip.tg-ctx:hover { color: var(--text-normal); }
 .taskgregator .tg-chip.tg-due.is-overdue { color: var(--text-error); }
+.taskgregator .tg-chip.tg-age { color: var(--text-faint); }
+.taskgregator .tg-chip.tg-age.is-aged { color: var(--text-warning); font-weight: var(--font-semibold); }
 .taskgregator .tg-chip.tg-tag { color: var(--text-accent); }
 .taskgregator .tg-chip.tg-note { cursor: pointer; }
 .taskgregator .tg-chip.tg-note:hover { background: var(--background-modifier-hover); }
@@ -432,6 +434,32 @@
 .taskgregator.tg-context .tg-duefilter-seg.is-empty {
   opacity: 0.35;
 }
+/* Tri-state sort row; segments line up with the due-filter/tab "All" columns. */
+.taskgregator.tg-context .tg-context-sort {
+  display: flex;
+  gap: 2px;
+  margin: 8px 0 2px;
+}
+.taskgregator.tg-context .tg-context-sort-seg {
+  display: flex;
+  align-items: center;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+.taskgregator.tg-context .tg-context-sort-seg:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+.taskgregator.tg-context .tg-context-sort-seg.is-active {
+  color: var(--text-normal);
+  background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+  font-weight: var(--font-medium);
+}
 .taskgregator.tg-context .tg-tab {
   display: flex;
   align-items: center;
@@ -478,3 +506,15 @@
 }
 .tg-inline-note:hover { opacity: 1; }
 .tg-inline-note svg { width: 0.9em; height: 0.9em; }
+
+/* "What's new" changelog modal. */
+.tg-changelog-modal { width: min(720px, 90vw); }
+.tg-changelog-body { max-height: 60vh; overflow-y: auto; padding-right: 6px; }
+.tg-changelog-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  margin: 6px 0 12px;
+}
+.tg-changelog-footer { display: flex; justify-content: flex-end; margin-top: 12px; }

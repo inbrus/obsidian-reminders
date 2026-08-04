@@ -4,13 +4,14 @@
 
 import { ContextScope, DueFilter } from "./context";
 
-export type SortKey = "priority" | "due" | "start" | "reference" | "title";
+export type SortKey = "priority" | "due" | "start" | "created" | "reference" | "title";
 export type GroupKey = "none" | "priority" | "due" | "reference";
 export type Selection =
   | { type: "overdue" }
   | { type: "today" }
   | { type: "tomorrow" }
   | { type: "soon" }
+  | { type: "aging" }
   | { type: "all" }
   | { type: "flagged" }
   | { type: "tags" }
@@ -33,4 +34,10 @@ export class TaskgregatorState {
   // panel doesn't reset when the active file changes or the leaf reloads.
   contextTab: ContextScope = "all";
   contextDueFilter: DueFilter = "all";
+  // Context sidebar sort. Mirrors the main list's tri-state model: pick a key,
+  // click again to flip direction, a third click clears back to the natural
+  // scope order (page -> section -> reference). Only one key is active.
+  contextSortBy: SortKey = "priority";
+  contextSortDir: "asc" | "desc" = "asc";
+  contextSortExplicit = false;
 }

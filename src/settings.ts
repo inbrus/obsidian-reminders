@@ -38,10 +38,17 @@ export interface TaskgregatorSettings {
   startupView: StartupView;
   // "Soon" smart-list window in days (tasks due within the next N days).
   soonDays: number;
+  // "Aging" smart-list threshold in days: still-open tasks created this many
+  // days ago or older are surfaced as aging.
+  agingDays: number;
   // Metadata format written to task lines. "auto" follows the Tasks plugin.
   // Reading is always dual-format; this only affects lines with no existing
   // metadata (existing emoji/dataview lines keep their own format).
   taskFormat: TaskFormatSetting;
+  // Pop the changelog in a modal the first time the plugin loads after an update.
+  showChangelogOnUpdate: boolean;
+  // Last plugin version whose changelog was shown (internal; not user-facing).
+  lastSeenVersion: string;
 }
 
 export const DEFAULT_SETTINGS: TaskgregatorSettings = {
@@ -62,7 +69,10 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
   enableContextSidebar: true,
   startupView: "disabled",
   soonDays: 7,
+  agingDays: 14,
   taskFormat: "auto",
+  showChangelogOnUpdate: true,
+  lastSeenVersion: "",
 };
 
 export class TaskgregatorSettingTab extends PluginSettingTab {
@@ -117,6 +127,11 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         control: { type: "text", key: "soonDays" },
       },
       {
+        name: "Aging threshold (days)",
+        desc: "Aging list shows still-open tasks created this many days ago or older (default 14).",
+        control: { type: "text", key: "agingDays" },
+      },
+      {
         name: "Show completed tasks",
         control: { type: "toggle", key: "showCompleted" },
       },
@@ -124,6 +139,11 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         name: "Context sidebar",
         desc: "Auto-open the file-context task panel in the right sidebar on startup.",
         control: { type: "toggle", key: "enableContextSidebar" },
+      },
+      {
+        name: "Show changelog on update",
+        desc: "Pop a What's New window the first time the plugin loads after an update.",
+        control: { type: "toggle", key: "showChangelogOnUpdate" },
       },
       {
         name: "Load Taskgregator on startup",
@@ -163,10 +183,14 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         return s.sidecarFolder;
       case "soonDays":
         return String(s.soonDays);
+      case "agingDays":
+        return String(s.agingDays);
       case "showCompleted":
         return s.showCompleted;
       case "enableContextSidebar":
         return s.enableContextSidebar;
+      case "showChangelogOnUpdate":
+        return s.showChangelogOnUpdate;
       case "startupView":
         return s.startupView;
       case "taskFormat":
@@ -200,11 +224,17 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
       case "soonDays":
         s.soonDays = clampDays(value);
         break;
+      case "agingDays":
+        s.agingDays = clampDays(value, 14);
+        break;
       case "showCompleted":
         s.showCompleted = Boolean(value);
         break;
       case "enableContextSidebar":
         s.enableContextSidebar = Boolean(value);
+        break;
+      case "showChangelogOnUpdate":
+        s.showChangelogOnUpdate = Boolean(value);
         break;
       case "startupView":
         s.startupView = normalizeStartupView(value);
@@ -311,6 +341,18 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Aging threshold (days)")
+      .setDesc("Aging list shows still-open tasks created this many days ago or older (default 14).")
+      .addText((t) =>
+        t
+          .setValue(String(this.plugin.settings.agingDays))
+          .onChange(async (v) => {
+            this.plugin.settings.agingDays = clampDays(v, 14);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Show completed tasks")
       .addToggle((tg) =>
         tg.setValue(this.plugin.settings.showCompleted).onChange(async (v) => {
@@ -328,6 +370,16 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
       .addToggle((tg) =>
         tg.setValue(this.plugin.settings.enableContextSidebar).onChange(async (v) => {
           this.plugin.settings.enableContextSidebar = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Show changelog on update")
+      .setDesc("Pop a What's New window the first time the plugin loads after an update.")
+      .addToggle((tg) =>
+        tg.setValue(this.plugin.settings.showChangelogOnUpdate).onChange(async (v) => {
+          this.plugin.settings.showChangelogOnUpdate = v;
           await this.plugin.saveSettings();
         })
       );
@@ -388,9 +440,9 @@ function normalizeTaskFormat(value: unknown): TaskFormatSetting {
   return v === "emoji" || v === "dataview" ? v : "auto";
 }
 
-function clampDays(value: unknown): number {
+function clampDays(value: unknown, fallback = 7): number {
   const n = Math.round(Number(value));
-  if (!Number.isFinite(n) || n < 1) return 7;
+  if (!Number.isFinite(n) || n < 1) return fallback;
   return Math.min(n, 365);
 }
 

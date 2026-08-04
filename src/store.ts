@@ -225,6 +225,17 @@ export class TaskStore {
     return this.visible().filter((t) => t.meta.due && t.meta.due > today && t.meta.due <= end);
   }
 
+  /**
+   * Aging tasks: still-open tasks whose created date is `agingDays` days ago or
+   * older (i.e. they've been sitting around). Tasks with no created date are
+   * excluded since we can't tell how old they are. Reads created from either
+   * the ➕ emoji or the [created:: …] Dataview field (handled by the parser).
+   */
+  aging(): TaskItem[] {
+    const cutoff = this.dayOffset(-Math.max(1, this.settings.agingDays));
+    return this.visible().filter((t) => t.meta.created && t.meta.created <= cutoff);
+  }
+
   /** ISO date (YYYY-MM-DD) `n` days from today. */
   private dayOffset(n: number): string {
     const d = new Date();
@@ -240,6 +251,7 @@ export class TaskStore {
       today: this.dueToday().length,
       tomorrow: this.dueTomorrow().length,
       soon: this.dueSoon().length,
+      aging: this.aging().length,
       flagged: v.filter((t) => t.priority > 0 && t.priority <= 2).length,
     };
   }

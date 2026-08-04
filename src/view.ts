@@ -15,6 +15,7 @@ const SORT_OPTIONS: [SortKey, string][] = [
   ["priority", "Priority"],
   ["due", "Due date"],
   ["start", "Start date"],
+  ["created", "Age"],
   ["reference", "Reference"],
   ["title", "Title"],
 ];
@@ -100,6 +101,7 @@ export class TaskgregatorView extends ItemView {
       writer: this.deps.writer,
       reindexFile: this.deps.reindexFile,
       rerender: () => this.render(),
+      agingDays: this.deps.settings.agingDays,
       onTagClick: (tag: string) => {
         this.state.selection = { type: "smart", tag, label: "#" + tag };
         void this.deps.openList();
@@ -119,6 +121,8 @@ export class TaskgregatorView extends ItemView {
         return { title: "Tomorrow", tasks: this.deps.store.dueTomorrow() };
       case "soon":
         return { title: "Soon", tasks: this.deps.store.dueSoon() };
+      case "aging":
+        return { title: "Aging", tasks: this.deps.store.aging() };
       case "flagged":
         return {
           title: "Flagged",
@@ -154,9 +158,12 @@ export class TaskgregatorView extends ItemView {
 
     if (tasks.length === 0) {
       this.renderControls(el);
-      const msg = query
-        ? `No tasks match "${query}" in ${title}.`
-        : "No tasks here. Nice.";
+      let msg = "No tasks here. Nice.";
+      if (query) {
+        msg = `No tasks match "${query}" in ${title}.`;
+      } else if (this.state.selection.type === "aging") {
+        msg = "Add created dates to your tasks to populate Aging.";
+      }
       el.createDiv({ cls: "tg-empty", text: msg });
       return;
     }
@@ -267,7 +274,7 @@ export class TaskgregatorView extends ItemView {
   }
 }
 
-function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc" = "asc"): TaskItem[] {
+export function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc" = "asc"): TaskItem[] {
   const byPrio = (a: TaskItem, b: TaskItem) => (a.priority || 99) - (b.priority || 99);
   const byText = (a: TaskItem, b: TaskItem) => a.text.localeCompare(b.text);
   const byDue = (a: TaskItem, b: TaskItem) => {
@@ -278,6 +285,13 @@ function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc" = "asc
   const byStart = (a: TaskItem, b: TaskItem) => {
     const da = a.meta.start || "9999-99-99";
     const db = b.meta.start || "9999-99-99";
+    return da === db ? 0 : da < db ? -1 : 1;
+  };
+  const byCreated = (a: TaskItem, b: TaskItem) => {
+    // Undated tasks sort last in ascending order (oldest-first puts the most
+    // aged tasks at the top).
+    const da = a.meta.created || "9999-99-99";
+    const db = b.meta.created || "9999-99-99";
     return da === db ? 0 : da < db ? -1 : 1;
   };
   const byRef = (a: TaskItem, b: TaskItem) => refKey(a).localeCompare(refKey(b));
@@ -291,6 +305,9 @@ function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc" = "asc
         break;
       case "start":
         c = byStart(a, b) || byPrio(a, b) || byText(a, b);
+        break;
+      case "created":
+        c = byCreated(a, b) || byPrio(a, b) || byText(a, b);
         break;
       case "reference":
         c = byRef(a, b) || byPrio(a, b) || byDue(a, b) || byText(a, b);

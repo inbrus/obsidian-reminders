@@ -11,6 +11,9 @@ export interface TaskRowCtx {
   writer: TaskWriter;
   reindexFile: (path: string) => Promise<void>;
   rerender: () => void;
+  // Age (in days) at/above which the created-age chip turns "aged" (warning
+  // color) instead of the neutral grey. Mirrors the Aging smart list threshold.
+  agingDays: number;
   // Navigate to the in-plugin list for an inline #tag (host wires this to the
   // shared selection). Omitted callers fall back to Obsidian global search.
   onTagClick?: (tag: string) => void;
@@ -18,6 +21,20 @@ export interface TaskRowCtx {
 
 export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Whole days between a YYYY-MM-DD date and today (0 if today, negative future). */
+export function daysSince(date: string): number | undefined {
+  const then = Date.parse(date + "T00:00:00");
+  if (Number.isNaN(then)) return undefined;
+  const now = Date.parse(todayStr() + "T00:00:00");
+  return Math.round((now - then) / 86400000);
+}
+
+/** Human age label: "Today", "1 Day", "5 Days". */
+export function formatAge(days: number): string {
+  if (days <= 0) return "Today";
+  return `${days} ${days === 1 ? "Day" : "Days"}`;
 }
 
 export function jumpToSource(app: App, task: TaskItem): void {
@@ -47,6 +64,15 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
 
   // Meta row: context, dates, tags.
   const meta = body.createDiv({ cls: "tg-task-meta" });
+  if (task.meta.created) {
+    const days = daysSince(task.meta.created);
+    if (days !== undefined) {
+      const age = meta.createSpan({ cls: "tg-chip tg-age" });
+      if (days >= Math.max(1, ctx.agingDays)) age.addClass("is-aged");
+      age.setText("🌱 " + formatAge(days));
+      age.setAttr("aria-label", "Created " + task.meta.created);
+    }
+  }
   const ctxChip = meta.createSpan({ cls: "tg-chip tg-ctx" });
   ctxChip.setText(`${task.bucketRoot}: ${task.bucketFile}`);
   ctxChip.onclick = () => jumpToSource(ctx.app, task);
