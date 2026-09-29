@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf } from "obsidian";
 import { TaskItem, TreeNode } from "./types";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./writer";
-import { nodeKeyForFile } from "./parser";
+import { nodeKeyForFile, ALT_CHECKBOX_ICONS } from "./parser";
 import { TaskgregatorSettings } from "./settings";
 import { TaskRowCtx, renderTaskRow, todayStr, promptDate } from "./ui";
 import { Selection, SortKey, GroupKey, TaskgregatorState } from "./state";
@@ -16,6 +16,8 @@ const SORT_OPTIONS: [SortKey, string][] = [
   ["due", "Due date"],
   ["start", "Start date"],
   ["created", "Age"],
+  ["mtime", "Modified"],
+  ["ctime", "Created"],
   ["reference", "Reference"],
   ["title", "Title"],
 ];
@@ -24,6 +26,9 @@ const GROUP_OPTIONS: [GroupKey, string][] = [
   ["none", "None"],
   ["priority", "Priority"],
   ["due", "Due date"],
+  ["mtime", "Modified"],
+  ["ctime", "Created"],
+  ["type", "Type"],
   ["reference", "Reference"],
 ];
 
@@ -121,8 +126,8 @@ export class TaskgregatorView extends ItemView {
         return { title: "Tomorrow", tasks: this.deps.store.dueTomorrow() };
       case "soon":
         return { title: "Soon", tasks: this.deps.store.dueSoon() };
-      case "aging":
-        return { title: "Aging", tasks: this.deps.store.aging() };
+      case "inbox":
+        return { title: "Inbox", tasks: this.deps.store.untagged() };
       case "flagged":
         return {
           title: "Flagged",
@@ -130,6 +135,10 @@ export class TaskgregatorView extends ItemView {
         };
       case "all":
         return { title: "All tasks", tasks: this.deps.store.visible() };
+      case "inprogress":
+        return { title: "In Progress", tasks: this.deps.store.inProgress() };
+      case "completed":
+        return { title: "Completed", tasks: this.deps.store.completed() };
       case "tags":
         return { title: "All Tags", tasks: this.deps.store.taggedTasks() };
       case "smart":
@@ -161,8 +170,6 @@ export class TaskgregatorView extends ItemView {
       let msg = "No tasks here. Nice.";
       if (query) {
         msg = `No tasks match "${query}" in ${title}.`;
-      } else if (this.state.selection.type === "aging") {
-        msg = "Add created dates to your tasks to populate Aging.";
       }
       el.createDiv({ cls: "tg-empty", text: msg });
       return;
@@ -170,8 +177,8 @@ export class TaskgregatorView extends ItemView {
 
     this.renderControls(el);
 
-    const key = this.state.sortExplicit ? this.state.sortBy : "priority";
-    const dir = this.state.sortExplicit ? this.state.sortDir : "asc";
+    const key = this.state.sortExplicit ? this.state.sortBy : "ctime";
+    const dir = this.state.sortExplicit ? this.state.sortDir : "desc";
     const sorted = sortTasksBy(tasks, key, dir);
     const list = el.createDiv({ cls: "tg-list" });
 
@@ -242,8 +249,8 @@ export class TaskgregatorView extends ItemView {
       s.sortDir = "desc";
     } else {
       s.sortExplicit = false;
-      s.sortBy = "priority";
-      s.sortDir = "asc";
+      s.sortBy = "ctime";
+      s.sortDir = "desc";
     }
   }
 
@@ -294,6 +301,8 @@ export function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc"
     const db = b.meta.created || "9999-99-99";
     return da === db ? 0 : da < db ? -1 : 1;
   };
+  const byMtime = (a: TaskItem, b: TaskItem) => (a.mtime || 0) - (b.mtime || 0);
+  const byCtime = (a: TaskItem, b: TaskItem) => (a.ctime || 0) - (b.ctime || 0);
   const byRef = (a: TaskItem, b: TaskItem) => refKey(a).localeCompare(refKey(b));
 
   const mult = dir === "desc" ? -1 : 1;
@@ -308,6 +317,12 @@ export function sortTasksBy(tasks: TaskItem[], key: SortKey, dir: "asc" | "desc"
         break;
       case "created":
         c = byCreated(a, b) || byPrio(a, b) || byText(a, b);
+        break;
+      case "mtime":
+        c = byMtime(a, b) || byPrio(a, b) || byText(a, b);
+        break;
+      case "ctime":
+        c = byCtime(a, b) || byPrio(a, b) || byText(a, b);
         break;
       case "reference":
         c = byRef(a, b) || byPrio(a, b) || byDue(a, b) || byText(a, b);
@@ -353,6 +368,18 @@ function groupTasks(
     } else if (key === "due") {
       const bucket = dueBucket(t.meta.due);
       push(bucket.id, bucket.label, bucket.sort, t);
+    } else if (key === "mtime" || key === "ctime") {
+      const ms = key === "mtime" ? t.mtime : t.ctime;
+      const b = timeBucket(ms);
+      push(b.id, b.label, b.sort, t);
+    } else if (key === "type") {
+      const def = ALT_CHECKBOX_ICONS[t.statusChar];
+      if (def) {
+        const order = Object.keys(ALT_CHECKBOX_ICONS).indexOf(t.statusChar);
+        push("type:" + t.statusChar, def.label, order, t);
+      } else {
+        push("type:unspecified", "Unspecified", 999, t);
+      }
     } else {
       // reference
       const rk = refKey(t);
@@ -375,6 +402,19 @@ function dueBucket(due?: string): { id: string; label: string; sort: number } {
   const weekStr = week.toISOString().slice(0, 10);
   if (due <= weekStr) return { id: "week", label: "Next 7 days", sort: 2 };
   return { id: "later", label: "Later", sort: 3 };
+}
+
+function timeBucket(ms: number): { id: string; label: string; sort: number } {
+  if (!ms) return { id: "z-none", label: "Unknown", sort: 999 };
+  const d = new Date(ms);
+  const now = new Date();
+  const dayStart = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.floor((dayStart(now) - dayStart(d)) / 864e5);
+  if (diffDays <= 0) return { id: "today", label: "Today", sort: 0 };
+  if (diffDays === 1) return { id: "yesterday", label: "Yesterday", sort: 1 };
+  if (diffDays <= 7) return { id: "week", label: "This week", sort: 2 };
+  if (diffDays <= 30) return { id: "month", label: "This month", sort: 3 };
+  return { id: "older", label: "Older", sort: 4 };
 }
 
 function findNode(roots: TreeNode[], key: string): TreeNode | undefined {

@@ -1,6 +1,8 @@
 import { App, Menu, Modal, setIcon } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskWriter } from "./writer";
+import { ALT_CHECKBOX_ICONS, nextStatusChar } from "./parser";
+import { toIso, fromIso } from "./dateFormat";
 
 /**
  * Shared task-row rendering used by both the full Taskgregator hub view and the
@@ -43,24 +45,69 @@ export function jumpToSource(app: App, task: TaskItem): void {
 }
 
 export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowCtx): void {
-  const row = parent.createDiv({ cls: "tg-task" + (task.priority > 0 ? " has-prio" : "") });
+  const row = parent.createDiv({
+    cls: "tg-task" + (task.priority > 0 ? " has-prio p" + task.priority : ""),
+  });
 
   // Checkbox.
   const cb = row.createDiv({ cls: "tg-check" });
   cb.setAttr("data-status", task.statusChar);
-  if (task.status === "done") cb.addClass("is-done");
-  if (task.status === "inProgress") cb.addClass("is-doing");
+  cb.style.touchAction = "manipulation";
+  const alt = ALT_CHECKBOX_ICONS[task.statusChar];
+  if (alt) {
+    setIcon(cb, alt.icon);
+    cb.addClass("is-alt");
+  } else if (task.status === "done") {
+    cb.addClass("is-done");
+  } else if (task.status === "inProgress") {
+    cb.addClass("is-doing");
+  }
   cb.onclick = async () => {
-    await ctx.writer.toggleDone(task);
+    await ctx.writer.setStatus(task, nextStatusChar(task.statusChar));
     await ctx.reindexFile(task.filePath);
     ctx.rerender();
   };
+  cb.oncontextmenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    taskMenu(e, task, ctx);
+  };
+  cb.addEventListener("auxclick", (e) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      taskMenu(e, task, ctx);
+    }
+  });
+  let lpTimer: number | null = null;
+  const cancelLp = () => {
+    if (lpTimer) {
+      clearTimeout(lpTimer);
+      lpTimer = null;
+    }
+  };
+  cb.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") return;
+    lpTimer = window.setTimeout(() => {
+      lpTimer = null;
+      taskMenu(e, task, ctx);
+    }, 500);
+  });
+  cb.addEventListener("pointerup", cancelLp);
+  cb.addEventListener("pointermove", cancelLp);
+  cb.addEventListener("pointercancel", cancelLp);
 
   // Body.
   const body = row.createDiv({ cls: "tg-task-body" });
   const textEl = body.createDiv({ cls: "tg-task-text" });
   if (task.status === "done" || task.status === "cancelled") textEl.addClass("is-struck");
   renderTextWithLinks(ctx.app, textEl, task.text, task.links, ctx.onTagClick);
+  textEl.onclick = (e) => {
+    if (textEl.querySelector(".tg-inline-edit")) return;
+    const tgt = e.target as HTMLElement | null;
+    if (tgt && tgt.closest && (tgt.closest("a") || tgt.closest(".tg-tag"))) return;
+    startInlineEdit(textEl, task, ctx);
+  };
 
   // Meta row: context, dates, tags.
   const meta = body.createDiv({ cls: "tg-task-meta" });
@@ -77,11 +124,10 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   ctxChip.setText(`${task.bucketRoot}: ${task.bucketFile}`);
   ctxChip.onclick = () => jumpToSource(ctx.app, task);
   if (task.meta.due) {
-    const d = meta.createSpan({ cls: "tg-chip tg-due" });
-    if (task.meta.due < todayStr()) d.addClass("is-overdue");
-    d.setText("📅 " + task.meta.due);
+    const cls = task.meta.due < todayStr() ? "is-overdue" : "";
+    renderDateChip(ctx.app, meta, task.meta.due, "📅", cls);
   }
-  if (task.meta.start) meta.createSpan({ cls: "tg-chip", text: "🛫 " + task.meta.start });
+  if (task.meta.start) renderDateChip(ctx.app, meta, task.meta.start, "🛫");
   for (const tag of task.tags) meta.createSpan({ cls: "tg-chip tg-tag", text: "#" + tag });
   if (task.sidecarPath) {
     const note = meta.createSpan({ cls: "tg-chip tg-note", text: "📝" });
@@ -92,9 +138,8 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
     };
   }
 
-  // Priority flag.
+  // Priority indicator (solid circle, colored by level).
   const flag = row.createDiv({ cls: "tg-prio p" + task.priority });
-  setIcon(flag, "flag");
   flag.setAttr("aria-label", "Cycle priority");
   flag.onclick = async () => {
     const cur = task.priority >= 1 && task.priority <= 3 ? task.priority : task.priority > 3 ? 3 : 0;
@@ -146,24 +191,59 @@ function taskMenu(e: MouseEvent, task: TaskItem, ctx: TaskRowCtx): void {
     }
   });
 
+  menu.addSeparator();
+
+  // Type: alternative checkbox statuses (Anything-style).
+  menu.addItem((item) => {
+    item.setTitle("Type").setIcon("tag");
+    const setType = async (ch: string) => {
+      await ctx.writer.setStatus(task, ch);
+      await ctx.reindexFile(task.filePath);
+      ctx.rerender();
+    };
+    const sub = (item as unknown as { setSubmenu?: () => Menu }).setSubmenu?.();
+    if (sub) {
+      for (const [ch, def] of Object.entries(ALT_CHECKBOX_ICONS)) {
+        sub.addItem((s) =>
+          s
+            .setTitle(def.label)
+            .setIcon(def.icon)
+            .setChecked(task.statusChar === ch)
+            .onClick(() => void setType(ch))
+        );
+      }
+    } else {
+      item.setDisabled(true);
+      for (const [ch, def] of Object.entries(ALT_CHECKBOX_ICONS)) {
+        menu.addItem((s) =>
+          s
+            .setTitle(def.label)
+            .setIcon(def.icon)
+            .setChecked(task.statusChar === ch)
+            .onClick(() => void setType(ch))
+        );
+      }
+    }
+  });
+
   menu.addItem((i) =>
     i.setTitle("Set due date").setIcon("calendar").onClick(async () => {
       const d = await promptDate(ctx.app, "Due date", task.meta.due);
-      if (d !== undefined) {
-        await ctx.writer.setDue(task, d);
-        await ctx.reindexFile(task.filePath);
-        ctx.rerender();
-      }
+      if (d === undefined) return;
+      const iso = d === null ? null : toIso(d) ?? d;
+      await ctx.writer.setDue(task, iso);
+      await ctx.reindexFile(task.filePath);
+      ctx.rerender();
     })
   );
   menu.addItem((i) =>
     i.setTitle("Set start date").setIcon("plane").onClick(async () => {
       const d = await promptDate(ctx.app, "Start date", task.meta.start);
-      if (d !== undefined) {
-        await ctx.writer.setStart(task, d);
-        await ctx.reindexFile(task.filePath);
-        ctx.rerender();
-      }
+      if (d === undefined) return;
+      const iso = d === null ? null : toIso(d) ?? d;
+      await ctx.writer.setStart(task, iso);
+      await ctx.reindexFile(task.filePath);
+      ctx.rerender();
     })
   );
   menu.addItem((i) =>
@@ -203,13 +283,14 @@ export function renderTextWithLinks(
   el: HTMLElement,
   text: string,
   _links: string[],
-  onTagClick?: (tag: string) => void
+  _onTagClick?: (tag: string) => void
 ): void {
-  // Render [[wikilinks]], Markdown inline links, and inline #tags as clickable
-  // links; rest as plain text. The tag pattern mirrors the parser's TAG_RE: it
-  // consumes the leading boundary (^ or whitespace) rather than a lookbehind
-  // (unsupported on iOS < 16.4) and re-emits that whitespace as plain text.
-  const re = /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)|(^|\s)#([A-Za-z][\w\-/]*)/g;
+  // Render [[wikilinks]], Markdown inline links, and inline markdown formatting
+  // (==highlight==, **bold**, *italic*, ~~strike~~, `code`) as DOM; rest as plain
+  // text. Inline #tags are consumed (matched) but not rendered here — they show
+  // as chips in the meta row instead.
+  const re =
+    /\[\[([^\]]+?)\]\]|\[([^\]\n]+?)\]\(([^)\s]+)\)|(^|\s)#([A-Za-z][\w\-/]*)|==([^=\n]+?)==|\*\*([^*\n]+?)\*\*|\*([^*\n]+?)\*|~~([^~\n]+?)~~|`([^`\n]+?)`/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
@@ -219,9 +300,21 @@ export function renderTextWithLinks(
       renderWikilink(app, el, m[1]);
     } else if (m[2] !== undefined) {
       renderMarkdownLink(app, el, m[2], m[3]);
-    } else if (m[5] !== undefined) {
-      if (m[4]) el.appendText(m[4]);
-      renderTag(app, el, m[5], onTagClick);
+    } else if (m[6] !== undefined) {
+      const span = el.createEl("mark", { text: m[6] });
+      span.addClass("tg-highlight");
+    } else if (m[7] !== undefined) {
+      const span = el.createEl("strong", { text: m[7] });
+      span.addClass("tg-bold");
+    } else if (m[8] !== undefined) {
+      const span = el.createEl("em", { text: m[8] });
+      span.addClass("tg-italic");
+    } else if (m[9] !== undefined) {
+      const span = el.createEl("s", { text: m[9] });
+      span.addClass("tg-strike");
+    } else if (m[10] !== undefined) {
+      const span = el.createEl("code", { text: m[10] });
+      span.addClass("tg-code");
     }
 
     last = m.index + m[0].length;
@@ -263,31 +356,68 @@ function renderMarkdownLink(app: App, el: HTMLElement, label: string, target: st
   };
 }
 
-function renderTag(
-  app: App,
-  el: HTMLElement,
-  tagName: string,
-  onTagClick?: (tag: string) => void
-): void {
-  // Render as a native Obsidian tag pill (class "tag") so it matches how tags
-  // look in normal page renders. Clicking navigates to that tag's in-plugin
-  // list (via onTagClick); with no host callback we fall back to Obsidian's
-  // global search, like a native tag. The compact meta-row chip is untouched.
-  const a = el.createEl("a", { cls: "tag", text: "#" + tagName });
-  a.setAttr("href", "#" + tagName);
-  a.onclick = (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (onTagClick) {
-      onTagClick(tagName);
+/** Start an inline edit of the task text; Enter/blur commits, Escape cancels. */
+function startInlineEdit(textEl: HTMLElement, task: TaskItem, ctx: TaskRowCtx): void {
+  const original = task.text;
+  const restore = () => {
+    textEl.empty();
+    renderTextWithLinks(ctx.app, textEl, original, task.links, ctx.onTagClick);
+  };
+  textEl.empty();
+  const input = textEl.createEl("input", { cls: "tg-inline-edit" });
+  input.value = original;
+  input.focus();
+  input.select();
+  let finished = false;
+  const commit = async () => {
+    if (finished) return;
+    finished = true;
+    const v = input.value;
+    if (v === original) {
+      restore();
       return;
     }
-    const search = (app as unknown as {
-      internalPlugins?: {
-        getPluginById?: (id: string) => { instance?: { openGlobalSearch?: (q: string) => void } } | null;
-      };
-    }).internalPlugins?.getPluginById?.("global-search")?.instance;
-    search?.openGlobalSearch?.("tag:#" + tagName);
+    await ctx.writer.setText(task, v);
+    await ctx.reindexFile(task.filePath);
+    ctx.rerender();
+  };
+  const cancel = () => {
+    if (finished) return;
+    finished = true;
+    restore();
+  };
+  input.addEventListener("blur", () => {
+    if (document.activeElement === input) return;
+    void commit();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
+  });
+}
+
+/** Render a date as a clickable wikilink chip (opens the matching daily note). */
+function renderDateChip(
+  app: App,
+  parent: HTMLElement,
+  iso: string,
+  emoji: string,
+  extraCls?: string
+): void {
+  const display = fromIso(iso);
+  const target = display;
+  const a = parent.createEl("a", {
+    cls: "tg-link internal-link tg-date-link" + (extraCls ? " " + extraCls : ""),
+    text: `${emoji} ${display}`,
+  });
+  a.onclick = (ev) => {
+    ev.preventDefault();
+    void app.workspace.openLinkText(target, "", false);
   };
 }
 
@@ -305,17 +435,22 @@ class DateModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.createEl("h3", { text: this.label });
-    const input = contentEl.createEl("input", { type: "date" });
-    input.value = this.value;
+    contentEl.empty();
+    contentEl.addClass("tg-date-modal");
+    const title = contentEl.createEl("h3", { text: this.label });
+    title.addClass("tg-date-modal-title");
+    const help = contentEl.createDiv({ cls: "tg-date-modal-hint" });
+    help.setText("Saved as [[DD-MM-YYYY]] wikilink.");
+    const input = contentEl.createEl("input", { type: "date", cls: "tg-date-input" });
+    input.value = this.value || "";
     input.focus();
-    const btns = contentEl.createDiv({ cls: "tg-modal-btns" });
-    const save = btns.createEl("button", { text: "Save", cls: "mod-cta" });
+    const btns = contentEl.createDiv({ cls: "tg-date-modal-btns" });
+    const save = btns.createEl("button", { text: "Save", cls: "mod-cta tg-date-btn" });
     save.onclick = () => {
       this.resolve(input.value || null);
       this.close();
     };
-    const clear = btns.createEl("button", { text: "Clear" });
+    const clear = btns.createEl("button", { text: "Clear", cls: "tg-date-btn" });
     clear.onclick = () => {
       this.resolve(null);
       this.close();

@@ -7,6 +7,8 @@
 //
 // Reference: https://publish.obsidian.md/tasks/Reference/Task+Formats/Dataview+Format
 
+import { toIso, WIKILINK_DMY } from "./dateFormat";
+
 export type TaskFormat = "emoji" | "dataview";
 
 // Dataview field keys understood by the Tasks plugin. `completion` and
@@ -65,20 +67,25 @@ const DATE = "\\d{4}-\\d{2}-\\d{2}";
  * bracket style: `[key:: value]` or `(key:: value)`. Capture group 1 is the
  * trimmed-ish value (leading/trailing spaces inside the brackets are allowed).
  */
-function fieldRe(key: string, value = "[^\\]\\)]*?"): RegExp {
+function fieldRe(key: string, value: string): RegExp {
   const k = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`[\\[(]\\s*${k}\\s*::\\s*(${value})\\s*[\\])]`, "i");
 }
 
 /** Read a Dataview date field (returns YYYY-MM-DD) if present. */
 export function readDvDate(text: string, key: string): string | undefined {
-  const m = text.match(fieldRe(key, DATE));
-  return m ? m[1] : undefined;
+  const wRe = fieldRe(key, WIKILINK_DMY);
+  const wm = text.match(wRe);
+  if (wm) return toIso(wm[1]);
+  const isoRe = fieldRe(key, DATE);
+  const im = text.match(isoRe);
+  if (im) return toIso(im[1]);
+  return undefined;
 }
 
 /** Read an arbitrary Dataview field value if present. */
 export function readDvField(text: string, key: string): string | undefined {
-  const m = text.match(fieldRe(key));
+  const m = text.match(fieldRe(key, "[^\\]\\)]*?"));
   return m ? m[1].trim() : undefined;
 }
 
@@ -91,14 +98,14 @@ export function readDvPriority(text: string): number {
 
 /** True if the line contains any recognized Dataview task field. */
 export function hasDataviewField(text: string): boolean {
-  return DV_TASK_KEYS.some((k) => fieldRe(k).test(text));
+  return DV_TASK_KEYS.some((k) => fieldRe(k, "[^\\]\\)]*?").test(text));
 }
 
 /** Remove all recognized Dataview task fields from `text` (for display). */
 export function stripDataviewFields(text: string): string {
   let out = text;
   for (const key of DV_TASK_KEYS) {
-    out = out.replace(new RegExp(fieldRe(key).source, "gi"), "");
+    out = out.replace(new RegExp(fieldRe(key, "[^\\]\\)]*?").source, "gi"), "");
   }
   return out;
 }
@@ -110,7 +117,13 @@ export function stripDataviewFields(text: string): string {
  * the caller via appendSignifier.
  */
 export function stripDvField(line: string, key: string): string {
-  return line
-    .replace(new RegExp("\\s*" + fieldRe(key).source, "gi"), "")
-    .trimEnd();
+  const sources = [
+    fieldRe(key, "[^\\]\\)]*?").source,
+    fieldRe(key, WIKILINK_DMY).source,
+  ];
+  let out = line;
+  for (const src of sources) {
+    out = out.replace(new RegExp("\\s*" + src, "gi"), "");
+  }
+  return out.trimEnd();
 }

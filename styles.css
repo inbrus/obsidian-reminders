@@ -112,11 +112,11 @@
 .taskgregator .tg-side-item.is-active,
 .taskgregator .tg-tree-row.is-active {
   background: var(--background-modifier-active-hover, var(--interactive-accent));
-  color: var(--text-on-accent);
+  color: var(--text-normal);
 }
 .taskgregator .tg-side-item.is-active .tg-badge,
 .taskgregator .tg-tree-row.is-active .tg-badge {
-  color: var(--text-on-accent);
+  color: var(--text-normal);
 }
 
 .taskgregator .tg-tree-icon {
@@ -189,24 +189,25 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 6px;
-  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 10px 6px;
+  border-bottom: 1px dashed var(--background-modifier-border);
 }
-.taskgregator .tg-task:hover { background: var(--background-modifier-hover); }
 
 .taskgregator .tg-check {
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  border: 1.6px solid var(--text-faint);
-  border-radius: 4px;
+  border: 1.5px solid var(--checkbox-border-color, var(--background-modifier-border));
+  border-radius: var(--checkbox-radius, 4px);
+  background: transparent;
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
 }
 .taskgregator .tg-check.is-doing {
+  border-radius: 50%;
   border-color: var(--interactive-accent);
-  background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--interactive-accent) 3px, var(--interactive-accent) 4px);
+  background: linear-gradient(90deg, var(--interactive-accent) 50%, transparent 50%);
 }
 .taskgregator .tg-check.is-done {
   background: var(--interactive-accent);
@@ -221,6 +222,24 @@
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+.taskgregator .tg-check.is-alt {
+  border: none;
+  background: none;
+}
+.taskgregator .tg-check.is-alt svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-normal);
+}
+.taskgregator .tg-task.p1 .tg-check { border-color: #e5484d; }
+.taskgregator .tg-task.p2 .tg-check { border-color: #f5a623; }
+.taskgregator .tg-task.p3 .tg-check { border-color: #4c9aff; }
+.taskgregator .tg-task.p1 .tg-check.is-alt svg { color: #e5484d; }
+.taskgregator .tg-task.p2 .tg-check.is-alt svg { color: #f5a623; }
+.taskgregator .tg-task.p3 .tg-check.is-alt svg { color: #4c9aff; }
+.taskgregator .tg-task.p1 .tg-check.is-doing { border-color: #e5484d; background: linear-gradient(90deg, #e5484d 50%, transparent 50%); }
+.taskgregator .tg-task.p2 .tg-check.is-doing { border-color: #f5a623; background: linear-gradient(90deg, #f5a623 50%, transparent 50%); }
+.taskgregator .tg-task.p3 .tg-check.is-doing { border-color: #4c9aff; background: linear-gradient(90deg, #4c9aff 50%, transparent 50%); }
 
 .taskgregator .tg-task-body { flex: 1; min-width: 0; }
 
@@ -235,7 +254,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 10px;
 }
 
 .taskgregator .tg-chip {
@@ -255,15 +274,18 @@
 .taskgregator .tg-chip.tg-note:hover { background: var(--background-modifier-hover); }
 
 .taskgregator .tg-prio {
-  opacity: 0.25;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  opacity: 0.35;
   cursor: pointer;
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 4px;
 }
-.taskgregator .tg-prio svg { width: 15px; height: 15px; }
-.taskgregator .tg-prio.p1 { opacity: 1; color: #e5484d; }
-.taskgregator .tg-prio.p2 { opacity: 1; color: #f5a623; }
-.taskgregator .tg-prio.p3 { opacity: 1; color: #4c9aff; }
+.taskgregator .tg-prio.p1 { opacity: 1; background: #e5484d; }
+.taskgregator .tg-prio.p2 { opacity: 1; background: #f5a623; }
+.taskgregator .tg-prio.p3 { opacity: 1; background: #4c9aff; }
 
 .taskgregator .tg-more {
   opacity: 0.4;
@@ -279,6 +301,39 @@
   display: flex;
   gap: 8px;
   margin-top: 12px;
+}
+.tg-date-modal { padding: 6px 2px; }
+.tg-date-modal-title { margin: 0 0 6px; font-size: 1.05em; }
+.tg-date-modal-hint {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+.tg-date-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 1em;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-form-field);
+  color: var(--text-normal);
+  margin-bottom: 14px;
+}
+.tg-date-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+.tg-date-modal-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.tg-date-btn {
+  padding: 8px 16px;
+  font-size: 0.95em;
+  border-radius: 6px;
+  min-width: 88px;
 }
 
 /* Sort / group controls */
@@ -388,6 +443,14 @@
 /* Split views: nav (left dock) + list (center) */
 .taskgregator.tg-list-view {
   height: 100%;
+  max-width: var(--file-line-width);
+  margin: 0 auto;
+  background-color: transparent !important;
+  border-radius: 20px;
+  padding: var(--size-4-3) var(--size-4-3);
+}
+.workspace-leaf:has(.taskgregator.tg-list-view) .view-header {
+  background: transparent;
 }
 .taskgregator.tg-list-view .tg-main {
   height: 100%;
@@ -518,3 +581,50 @@
   margin: 6px 0 12px;
 }
 .tg-changelog-footer { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+/* Inline markdown formatting rendered inside task text */
+.taskgregator .tg-highlight {
+  background-color: var(--text-highlight-bg, rgba(255, 220, 0, 0.35));
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+.taskgregator .tg-bold { font-weight: 600; }
+.taskgregator .tg-italic { font-style: italic; }
+.taskgregator .tg-strike { text-decoration: line-through; opacity: 0.75; }
+.taskgregator .tg-code {
+  font-family: var(--font-monospace);
+  font-size: 0.92em;
+  background: var(--background-secondary);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Date chip rendered as a wikilink in the task meta row. Hover gives the
+   same affordance as native Obsidian wikilinks so the user can discover
+   that clicking the date opens a daily-note (or whatever the linked
+   resolution resolves to). */
+.taskgregator .tg-date-link {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border-radius: 6px;
+  padding: 1px 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.taskgregator .tg-date-link:hover {
+  color: var(--link-color);
+}
+.taskgregator .tg-date-link.is-overdue { color: var(--text-error); }
+
+/* Inline text editor shown when a task's text is clicked. */
+.taskgregator .tg-task-text .tg-inline-edit {
+  width: 100%;
+  font: inherit;
+  color: var(--text-normal);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+  padding: 2px 6px;
+}

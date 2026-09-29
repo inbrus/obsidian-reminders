@@ -4,16 +4,33 @@
 
 import { ContextScope, DueFilter } from "./context";
 
-export type SortKey = "priority" | "due" | "start" | "created" | "reference" | "title";
-export type GroupKey = "none" | "priority" | "due" | "reference";
+export type SortKey =
+  | "priority"
+  | "due"
+  | "start"
+  | "created"
+  | "reference"
+  | "title"
+  | "mtime"
+  | "ctime";
+export type GroupKey =
+  | "none"
+  | "priority"
+  | "due"
+  | "reference"
+  | "mtime"
+  | "ctime"
+  | "type";
 export type Selection =
   | { type: "overdue" }
   | { type: "today" }
   | { type: "tomorrow" }
   | { type: "soon" }
-  | { type: "aging" }
+  | { type: "inbox" }
   | { type: "all" }
   | { type: "flagged" }
+  | { type: "inprogress" }
+  | { type: "completed" }
   | { type: "tags" }
   | { type: "smart"; tag: string; label: string }
   | { type: "node"; key: string; label: string };
@@ -24,12 +41,12 @@ export class TaskgregatorState {
   searchQuery = "";
   // Context-tree node keys the user has collapsed.
   collapsed: Set<string> = new Set();
-  sortBy: SortKey = "priority";
+  sortBy: SortKey = "ctime";
   // Sort direction and whether the user explicitly chose a sort. When not
-  // explicit, the list falls back to the default order (priority, natural).
-  sortDir: "asc" | "desc" = "asc";
+  // explicit, the list falls back to the default order (created, new to old).
+  sortDir: "asc" | "desc" = "desc";
   sortExplicit = false;
-  groupBy: GroupKey = "none";
+  groupBy: GroupKey = "ctime";
   // Context sidebar (right panel) selections. Persist for the session so the
   // panel doesn't reset when the active file changes or the leaf reloads.
   contextTab: ContextScope = "all";

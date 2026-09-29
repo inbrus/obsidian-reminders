@@ -1,6 +1,8 @@
 import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import { TreeNode } from "./types";
 import { ViewDeps } from "./view";
+import { NAV_SECTIONS } from "./parser";
+import { Selection } from "./state";
 
 export const VIEW_TYPE_TASKGREGATOR_NAV = "taskgregator-nav-view";
 
@@ -52,13 +54,6 @@ export class TaskgregatorNavView extends ItemView {
     el.empty();
     const c = this.deps.store.counts();
 
-    const header = el.createDiv({ cls: "tg-side-header" });
-    header.createSpan({ text: "Taskgregator" });
-    const reload = header.createSpan({ cls: "tg-icon-btn" });
-    setIcon(reload, "refresh-cw");
-    reload.setAttr("aria-label", "Reindex");
-    reload.onclick = () => this.deps.refresh();
-
     this.renderSearch(el, keepFocus, caret);
 
     const smart = el.createDiv({ cls: "tg-section" });
@@ -68,30 +63,26 @@ export class TaskgregatorNavView extends ItemView {
         this.choose();
       }, { alert: true });
     }
-    this.sideItem(smart, "star", "Today", c.today, this.state.selection.type === "today", () => {
-      this.state.selection = { type: "today" };
-      this.choose();
-    });
-    this.sideItem(smart, "sun", "Tomorrow", c.tomorrow, this.state.selection.type === "tomorrow", () => {
-      this.state.selection = { type: "tomorrow" };
-      this.choose();
-    });
-    this.sideItem(smart, "calendar-clock", "Soon", c.soon, this.state.selection.type === "soon", () => {
-      this.state.selection = { type: "soon" };
-      this.choose();
-    });
-    this.sideItem(smart, "hourglass", "Aging", c.aging, this.state.selection.type === "aging", () => {
-      this.state.selection = { type: "aging" };
-      this.choose();
-    });
-    this.sideItem(smart, "flag", "Flagged", c.flagged, this.state.selection.type === "flagged", () => {
-      this.state.selection = { type: "flagged" };
-      this.choose();
-    });
-    this.sideItem(smart, "inbox", "All", c.total, this.state.selection.type === "all", () => {
-      this.state.selection = { type: "all" };
-      this.choose();
-    });
+    const counts: Record<string, number> = {
+      today: c.today,
+      tomorrow: c.tomorrow,
+      soon: c.soon,
+      inbox: c.inbox,
+      inprogress: c.inprogress,
+      flagged: c.flagged,
+      all: c.total,
+      completed: c.completed,
+    };
+    for (const id of this.deps.settings.navOrder) {
+      if (this.deps.settings.navHidden.includes(id)) continue;
+      const def = NAV_SECTIONS.find((d) => d.id === id);
+      if (!def) continue;
+      const count = counts[id] ?? 0;
+      this.sideItem(smart, def.icon, def.label, count, this.state.selection.type === id, () => {
+        this.state.selection = { type: id } as Selection;
+        this.choose();
+      }, { showCount: this.deps.settings.navShowCounts[id] !== false });
+    }
 
     // Tag-driven smart lists.
     const lists = el.createDiv({ cls: "tg-section" });
@@ -151,6 +142,12 @@ export class TaskgregatorNavView extends ItemView {
     });
     clearBtn.onclick = () => clear();
 
+    // Reindex action lives inline with search (header was removed).
+    const reload = wrap.createSpan({ cls: "tg-icon-btn" });
+    setIcon(reload, "refresh-cw");
+    reload.setAttr("aria-label", "Reindex");
+    reload.onclick = () => this.deps.refresh();
+
     if (keepFocus) {
       input.focus();
       const pos = caret ?? input.value.length;
@@ -187,7 +184,7 @@ export class TaskgregatorNavView extends ItemView {
 
     const ic = row.createSpan({ cls: "tg-tree-icon" });
     setIcon(ic, "tags");
-    row.createSpan({ cls: "tg-tree-label", text: "All Tags" });
+    row.createSpan({ cls: "tg-tree-label", text: "→" });
     row.createSpan({ cls: "tg-badge", text: String(rollup) });
     row.onclick = () => {
       this.state.selection = { type: "tags" };
@@ -203,7 +200,7 @@ export class TaskgregatorNavView extends ItemView {
       child.createSpan({ cls: "tg-twisty tg-twisty-empty" });
       const cic = child.createSpan({ cls: "tg-tree-icon" });
       setIcon(cic, "hash");
-      child.createSpan({ cls: "tg-tree-label", text: "#" + tag });
+      child.createSpan({ cls: "tg-tree-label", text: tag });
       child.createSpan({ cls: "tg-badge", text: String(count) });
       child.onclick = () => {
         this.state.selection = { type: "smart", tag, label: "#" + tag };
@@ -258,7 +255,7 @@ export class TaskgregatorNavView extends ItemView {
     count: number,
     active: boolean,
     onClick: () => void,
-    opts?: { alert?: boolean }
+    opts?: { alert?: boolean; showCount?: boolean }
   ): void {
     const row = parent.createDiv({
       cls: "tg-side-item" + (active ? " is-active" : "") + (opts?.alert ? " is-alert" : ""),
@@ -266,7 +263,8 @@ export class TaskgregatorNavView extends ItemView {
     const ic = row.createSpan({ cls: "tg-tree-icon" });
     setIcon(ic, icon);
     row.createSpan({ cls: "tg-tree-label", text: label });
-    if (count > 0) row.createSpan({ cls: "tg-badge", text: String(count) });
+    if (count > 0 && opts?.showCount !== false)
+      row.createSpan({ cls: "tg-badge", text: String(count) });
     row.onclick = onClick;
   }
 }

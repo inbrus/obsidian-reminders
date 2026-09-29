@@ -23,12 +23,19 @@ export class TaskStore {
     return Array.from(this.tasks.values());
   }
 
-  /** Open (actionable) tasks, honoring the showCompleted setting. */
+  /** Open (actionable) tasks. Completed tasks live in the dedicated Completed hub. */
   visible(): TaskItem[] {
-    return this.all().filter((t) => {
-      if (this.settings.showCompleted) return true;
-      return t.status === "open" || t.status === "inProgress";
-    });
+    return this.all().filter((t) => t.status === "open" || t.status === "inProgress");
+  }
+
+  /** Completed (done) tasks, shown only in the Completed hub. */
+  completed(): TaskItem[] {
+    return this.all().filter((t) => t.status === "done");
+  }
+
+  /** In-progress tasks. */
+  inProgress(): TaskItem[] {
+    return this.all().filter((t) => t.status === "inProgress");
   }
 
   byId(id: string): TaskItem | undefined {
@@ -52,10 +59,6 @@ export class TaskStore {
     });
   }
 
-  /**
-   * Build the context tree: bucketRoot -> file -> tasks, with rolled-up open counts.
-   * Inbox roots collapse to a single node per root (flat).
-   */
   /**
    * Build the context tree: bucketRoot -> nested folders -> file -> tasks, with
    * rolled-up (deduped) open counts at every level. Inbox roots and the catch-all
@@ -189,7 +192,12 @@ export class TaskStore {
     return this.visible().filter((t) => t.tags.length > 0);
   }
 
-  /** Distinct tags in use with their open-task counts, sorted by count then name. */
+  /** Visible tasks with no tags at all (the Inbox list). */
+  untagged(): TaskItem[] {
+    return this.visible().filter((t) => t.tags.length === 0);
+  }
+
+  /** Distinct tags in use with their open-task counts, sorted alphabetically. */
   tagCounts(): { tag: string; count: number }[] {
     const counts = new Map<string, number>();
     for (const t of this.visible()) {
@@ -197,7 +205,7 @@ export class TaskStore {
     }
     return Array.from(counts.entries())
       .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+      .sort((a, b) => a.tag.localeCompare(b.tag, "en"));
   }
 
   /** Tasks due before today (Overdue smart list core). */
@@ -251,7 +259,9 @@ export class TaskStore {
       today: this.dueToday().length,
       tomorrow: this.dueTomorrow().length,
       soon: this.dueSoon().length,
-      aging: this.aging().length,
+      inbox: this.untagged().length,
+      inprogress: this.inProgress().length,
+      completed: this.completed().length,
       flagged: v.filter((t) => t.priority > 0 && t.priority <= 2).length,
     };
   }

@@ -22,15 +22,20 @@ export interface TaskItem {
   statusChar: string; // the raw char inside [ ]
   status: TaskStatus;
   text: string; // display text with emoji/metadata/tags stripped
+  textRaw: string; // body text before the first signifier (emoji/field), for inline edit
+  suffix: string; // body text from the first signifier onward (signifiers + dates)
   rawText: string; // the full original line
   tags: string[]; // inline #tags (without the leading #)
   links: string[]; // wikilink targets referenced in the task (normalized, no path/ext)
   priority: number; // 0 = none, 1 = highest .. higher number = lower priority
   meta: RawTaskMeta;
+  // File timestamps (ms epoch) for Modified/Created sort & group.
+  mtime: number;
+  ctime: number;
   // Derived context:
   bucketRoot: string; // "Projects" | "People" | "Areas" | "Dailies" | "Other"
   bucketFile: string; // basename of the source file, no extension
-  sidecarPath?: string; // Taskgregator/tasksData/<id>.md if it exists
+  sidecarPath?: string; // detail-note path if one exists
 }
 
 export interface TreeNode {

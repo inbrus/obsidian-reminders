@@ -1,6 +1,8 @@
 import { App, TFile, TFolder } from "obsidian";
 import { RawTaskMeta, TaskItem, TaskStatus } from "./types";
 import { TaskgregatorSettings } from "./settings";
+import { findSidecarFile } from "./sidecar";
+import { findDateAfter } from "./dateFormat";
 import {
   DV_KEYS,
   readDvDate,
@@ -34,20 +36,53 @@ const BLOCKID_RE = /\s\^([A-Za-z0-9-]+)\s*$/;
 const WIKILINK_RE = /\[\[([^\]]+?)\]\]/g;
 const TAG_RE = /(?:^|\s)#([A-Za-z][\w\-/]*)/g;
 
+// Alternative checkbox statuses (Anything-style) mapped to Lucide icons.
+export const ALT_CHECKBOX_ICONS: Record<string, { label: string; icon: string }> = {
+  "/": { label: "In progress", icon: "contrast" },
+  "-": { label: "Cancelled", icon: "ban" },
+  ">": { label: "Forwarded", icon: "send-horizontal" },
+  "<": { label: "Scheduling", icon: "calendar" },
+  "?": { label: "Question", icon: "circle-help" },
+  "!": { label: "Important", icon: "triangle-alert" },
+  "*": { label: "Star", icon: "star" },
+  '"': { label: "Quote", icon: "quote" },
+  l: { label: "Location", icon: "map-pin" },
+  b: { label: "Bookmark", icon: "bookmark" },
+  i: { label: "Info", icon: "info" },
+  S: { label: "Savings", icon: "dollar-sign" },
+  I: { label: "Idea", icon: "lightbulb" },
+  p: { label: "Pros", icon: "thumbs-up" },
+  c: { label: "Cons", icon: "thumbs-down" },
+  f: { label: "Fire", icon: "flame" },
+  k: { label: "Key", icon: "key-round" },
+  w: { label: "Win", icon: "trophy" },
+  u: { label: "Up", icon: "trending-up" },
+  d: { label: "Down", icon: "trending-down" },
+};
+
+// Navigation sections (left-sidebar smart lists), in default display order.
+export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
+  { id: "today", label: "Today", icon: "star" },
+  { id: "tomorrow", label: "Tomorrow", icon: "sun" },
+  { id: "soon", label: "Soon", icon: "calendar-clock" },
+  { id: "inbox", label: "Inbox", icon: "inbox" },
+  { id: "flagged", label: "Flagged", icon: "flag" },
+  { id: "all", label: "All", icon: "inbox" },
+  { id: "inprogress", label: "In Progress", icon: "circle-dot" },
+  { id: "completed", label: "Completed", icon: "check-check" },
+];
+
 export function statusFromChar(c: string): TaskStatus {
-  switch (c) {
-    case "x":
-    case "X":
-      return "done";
-    case "-":
-      return "cancelled";
-    case "/":
-      return "inProgress";
-    case ">":
-      return "forwarded";
-    default:
-      return "open";
-  }
+  if (c === "x" || c === "X") return "done";
+  if (c === "/") return "inProgress";
+  return "open";
+}
+
+/** Rotate a checkbox through the canonical cycle: [ ] -> [/] -> [x] -> [ ]. */
+export function nextStatusChar(c: string): string {
+  if (c === "/") return "x";
+  if (c === "x" || c === "X") return " ";
+  return "/";
 }
 
 function normalizeLink(target: string): string {
@@ -58,9 +93,24 @@ function normalizeLink(target: string): string {
 }
 
 function dateAfter(text: string, emoji: string): string | undefined {
-  const re = new RegExp(emoji + "\\s*" + DATE);
-  const m = text.match(re);
-  return m ? m[1] : undefined;
+  return findDateAfter(text, emoji);
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Index of the first metadata signifier (emoji, priority glyph, or [field::). */
+function firstSignifierIndex(body: string): number {
+  let pos = -1;
+  const test = (re: RegExp) => {
+    const m = body.match(re);
+    if (m && m.index !== undefined && (pos < 0 || m.index < pos)) pos = m.index;
+  };
+  for (const e of Object.values(EMOJI)) test(new RegExp(escapeRe(e)));
+  for (const e of Object.keys(PRIORITY_EMOJI)) test(new RegExp(escapeRe(e)));
+  test(/(?:^|\s)[a-zA-Z][\w-]*\s*::/);
+  return pos;
 }
 
 /**
@@ -142,14 +192,22 @@ export function parseLine(
   // Clean display text: strip emoji metadata + trailing dates + priority glyphs + tags.
   let text = body;
   for (const emoji of Object.values(EMOJI)) {
-    text = text.replace(new RegExp(emoji + "\\s*" + DATE, "g"), "");
-    text = text.replace(new RegExp(emoji, "g"), "");
+    const esc = emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    text = text.replace(new RegExp(esc + "\\s*\\[\\[\\d{2}-\\d{2}-\\d{4}\\]\\]", "g"), "");
+    text = text.replace(new RegExp(esc + "\\s*" + DATE, "g"), "");
+    text = text.replace(new RegExp(esc, "g"), "");
   }
   for (const em of Object.keys(PRIORITY_EMOJI)) text = text.split(em).join("");
   // Strip recognized Dataview task fields ([due:: ...] etc). Unrelated user
   // inline fields (e.g. [effort:: 3]) are intentionally left in place.
   text = stripDataviewFields(text);
   text = text.replace(/\s{2,}/g, " ").trim();
+
+  // Body split for inline editing: text before the first signifier, plus the
+  // signifier-and-dates suffix that must survive an inline text edit.
+  const sigPos = firstSignifierIndex(body);
+  const textRaw = (sigPos < 0 ? body : body.slice(0, sigPos)).trim();
+  const suffix = sigPos < 0 ? "" : body.slice(sigPos).trimStart();
 
   // Bucket context from the path.
   const { bucketRoot, bucketFile } = deriveBucket(filePath, settings);
@@ -166,11 +224,15 @@ export function parseLine(
     statusChar,
     status,
     text,
+    textRaw,
+    suffix,
     rawText: raw,
     tags,
     links,
     priority,
     meta,
+    mtime: 0,
+    ctime: 0,
     bucketRoot,
     bucketFile,
   };
@@ -273,7 +335,6 @@ export async function scanFile(
   const content = await app.vault.cachedRead(file);
   const lines = content.split("\n");
   const out: TaskItem[] = [];
-  const sidecarFolder = settings.sidecarFolder.replace(/\/$/, "");
   let inCode = false;
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trimStart();
@@ -284,9 +345,11 @@ export async function scanFile(
     if (inCode) continue;
     const task = parseLine(lines[i], file.path, i, settings);
     if (task) {
+      task.mtime = file.stat?.mtime ?? 0;
+      task.ctime = file.stat?.ctime ?? 0;
       if (task.blockId) {
-        const sidecar = `${sidecarFolder}/task-${task.blockId}.md`;
-        if (app.vault.getAbstractFileByPath(sidecar)) task.sidecarPath = sidecar;
+        const sf = findSidecarFile(app, settings, task.blockId);
+        if (sf) task.sidecarPath = sf.path;
       }
       out.push(task);
     }

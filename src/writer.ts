@@ -2,6 +2,15 @@ import { App, TFile, normalizePath } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskgregatorSettings } from "./settings";
 import { statusFromChar } from "./parser";
+import { wikilink, wikilinkAfter, stripDateAfter } from "./dateFormat";
+import {
+  sidecarPathFor,
+  findSidecarFile,
+  cleanTitleForFile,
+  stripTagsFromTitle,
+  toDDMMYYYY,
+  yamlEscape,
+} from "./sidecar";
 import {
   DV_KEYS,
   NUM_TO_DV_PRIORITY,
@@ -15,10 +24,11 @@ export const EMOJI_DUE = "📅";
 export const EMOJI_START = "🛫";
 const EMOJI_DONE = "✅";
 const EMOJI_CANCELLED = "❌";
-const DATE_G = "\\d{4}-\\d{2}-\\d{2}";
 // Tasks-plugin priority signifiers, highest first. Index 0 => level 1.
-const PRIORITY_EMOJI = ["🔺", "⏫", "🔼"];
-const ALL_PRIORITY_EMOJI = ["🔺", "⏫", "🔼", "🔽", "⏬"];
+const PRIORITY_EMOJI_HIGH = "⏫";
+const PRIORITY_EMOJI_LOW = "⏬";
+const PRIORITY_EMOJI = ["🔺", PRIORITY_EMOJI_HIGH, "🔼"];
+const ALL_PRIORITY_EMOJI = ["🔺", PRIORITY_EMOJI_HIGH, "🔼", "🔽", PRIORITY_EMOJI_LOW];
 // Emoji signifiers used to detect whether a line already uses the emoji format.
 const DETECT_EMOJI = ["📅", "🛫", "⏳", "➕", "✅", "❌", "🔁", ...ALL_PRIORITY_EMOJI];
 const CHECKBOX_RE = /^(\s*[-*+]\s+\[)(.)(\])/;
@@ -40,7 +50,7 @@ export function formatForLine(line: string, fallback: TaskFormat): TaskFormat {
 function setDvDateField(line: string, key: string, date: string | null): string {
   const stripped = stripDvField(line, key);
   if (!date) return stripped;
-  return appendSignifier(stripped, `[${key}:: ${date}]`);
+  return appendSignifier(stripped, `[${key}:: ${wikilink(date)}]`);
 }
 
 export function todayStr(): string {
@@ -69,17 +79,10 @@ export function appendSignifier(line: string, sig: string): string {
   return `${line.trimEnd()} ${sig}`;
 }
 
-function stripDateSignifier(line: string, emoji: string): string {
-  return line
-    .replace(new RegExp(`\\s*${emoji}\\s*${DATE_G}`, "g"), "")
-    .replace(new RegExp(`\\s*${emoji}`, "g"), "")
-    .trimEnd();
-}
-
 function setDateSignifier(line: string, emoji: string, date: string | null): string {
-  const stripped = stripDateSignifier(line, emoji);
+  const stripped = stripDateAfter(line, emoji);
   if (!date) return stripped;
-  return appendSignifier(stripped, `${emoji} ${date}`);
+  return appendSignifier(stripped, wikilinkAfter(emoji, date));
 }
 
 // --- Pure line transforms (usable on raw strings, editor lines, or via vault) ---
@@ -93,21 +96,21 @@ export function applyStatusToLine(
   const status = statusFromChar(statusChar);
   // Clear any existing done/cancelled dates in BOTH formats, then re-add in the
   // target format so a status change never leaves a stale/duplicate date.
-  out = stripDateSignifier(out, EMOJI_DONE);
-  out = stripDateSignifier(out, EMOJI_CANCELLED);
+  out = stripDateAfter(out, EMOJI_DONE);
+  out = stripDateAfter(out, EMOJI_CANCELLED);
   out = stripDvField(out, DV_KEYS.completion);
   out = stripDvField(out, DV_KEYS.cancelled);
   if (status === "done") {
     out =
       format === "dataview"
-        ? appendSignifier(out, `[${DV_KEYS.completion}:: ${todayStr()}]`)
-        : appendSignifier(out, `${EMOJI_DONE} ${todayStr()}`);
+        ? appendSignifier(out, `[${DV_KEYS.completion}:: ${wikilink(todayStr())}]`)
+        : appendSignifier(out, `${EMOJI_DONE} ${wikilink(todayStr())}`);
   }
   if (status === "cancelled") {
     out =
       format === "dataview"
-        ? appendSignifier(out, `[${DV_KEYS.cancelled}:: ${todayStr()}]`)
-        : appendSignifier(out, `${EMOJI_CANCELLED} ${todayStr()}`);
+        ? appendSignifier(out, `[${DV_KEYS.cancelled}:: ${wikilink(todayStr())}]`)
+        : appendSignifier(out, `${EMOJI_CANCELLED} ${wikilink(todayStr())}`);
   }
   return out;
 }
@@ -170,10 +173,6 @@ export function ensureBlockIdInLine(line: string): { line: string; blockId: stri
   if (existing) return { line, blockId: existing };
   const id = generateBlockId();
   return { line: line.trimEnd() + " ^" + id, blockId: id };
-}
-
-export function sidecarPathFor(settings: TaskgregatorSettings, blockId: string): string {
-  return normalizePath(`${normalizePath(settings.sidecarFolder)}/task-${blockId}.md`);
 }
 
 /** Locate the exact line index for a task, resilient to small shifts. */
@@ -262,6 +261,15 @@ export class TaskWriter {
     await this.editLine(task, (line) => toggleTagInLine(line, tag));
   }
 
+  /** Replace the task's body text, preserving the checkbox and trailing suffix. */
+  async setText(task: TaskItem, text: string): Promise<void> {
+    await this.editLine(task, (line) => {
+      const m = line.match(/^(\s*[-*+]\s+\[.\] \s?)(.*)$/);
+      if (!m) return line;
+      return m[1] + text + (task.suffix ? " " + task.suffix : "");
+    });
+  }
+
   /** Ensure the task line carries a block id; returns the block id. */
   async ensureBlockId(task: TaskItem): Promise<string> {
     if (task.blockId) return task.blockId;
@@ -279,7 +287,7 @@ export class TaskWriter {
   /** Ensure a sidecar detail note exists and return its path. */
   async ensureSidecar(task: TaskItem): Promise<string> {
     const blockId = await this.ensureBlockId(task);
-    const path = await this.ensureSidecarFor(blockId, task.text, task.filePath);
+    const path = await this.ensureSidecarFor(blockId, task.text, task.filePath, task);
     task.sidecarPath = path;
     return path;
   }
@@ -288,27 +296,38 @@ export class TaskWriter {
   async ensureSidecarFor(
     blockId: string,
     title: string,
-    sourcePath: string
+    sourcePath: string,
+    task?: TaskItem
   ): Promise<string> {
+    const existing = findSidecarFile(this.app, this.settings, blockId);
+    if (existing) return existing.path;
     const folder = normalizePath(this.settings.sidecarFolder);
     await this.ensureFolder(folder);
-    const path = sidecarPathFor(this.settings, blockId);
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (!existing) {
-      const link = `${sourcePath.replace(/\.md$/i, "")}#^${blockId}`;
-      const body =
-        `---\n` +
-        `type: task-detail\n` +
-        `task: "[[${link}]]"\n` +
-        `source: "${sourcePath}"\n` +
-        `blockId: "${blockId}"\n` +
-        `created: ${todayStr()}\n` +
-        `---\n\n` +
-        `# ${title}\n\n` +
-        `Source: [[${link}|open task]]\n\n` +
-        `## Notes\n\n`;
-      await this.app.vault.create(path, body);
-    }
+    const titleClean = stripTagsFromTitle(title, task?.tags);
+    const fileName = cleanTitleForFile(title, task?.tags);
+    const path = sidecarPathFor(this.settings, fileName, blockId);
+    const link = `${sourcePath.replace(/\.md$/i, "")}#^${blockId}`;
+    const date = toDDMMYYYY(todayStr());
+    const priorityHex = ["", "#e5484d", "#f5a623", "#4c9aff"][task?.priority || 0] || "";
+    const statusBool = task?.status === "done" ? "true" : "false";
+    const tagsBlock = (task?.tags || []).map((t) => `  - "#${t}"`).join("\n");
+    const body =
+      `---\n` +
+      `blockId: ${blockId}\n` +
+      `related:\n` +
+      `  - "[[Folders/Pages/Taskgregator|Taskgregator]]"\n` +
+      `date: "[[${date}]]"\n` +
+      `type: "[[Task]]"\n` +
+      `task-project:\n` +
+      `source-task: "[[${link}|Source →]]"\n` +
+      `title-task: "${yamlEscape(titleClean)}"\n` +
+      `priority-task:${priorityHex ? ` "${priorityHex}"` : ""}\n` +
+      `tags:\n` +
+      `${tagsBlock}\n` +
+      `status-task: ${statusBool}\n` +
+      `---\n\n` +
+      `# ${titleClean}\n`;
+    await this.app.vault.create(path, body);
     return path;
   }
 

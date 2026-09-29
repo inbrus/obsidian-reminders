@@ -1,5 +1,12 @@
-import { App, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
+import {
+  App,
+  PluginSettingTab,
+  Setting,
+  SettingDefinitionItem,
+  SettingPage,
+} from "obsidian";
 import type Taskgregator from "./main";
+import { NAV_SECTIONS } from "./parser";
 
 export type StartupView = "disabled" | "today" | "all" | "flagged";
 
@@ -28,8 +35,6 @@ export interface TaskgregatorSettings {
   sidecarFolder: string;
   // Date format used when writing dates (Tasks-plugin default is YYYY-MM-DD).
   dateFormat: string;
-  // Include completed tasks in the index/UI.
-  showCompleted: boolean;
   // Emoji signifiers (Tasks-plugin compatible).
   useEmojiMetadata: boolean;
   // Auto-open the context sidebar (follows the active file) on startup.
@@ -49,6 +54,12 @@ export interface TaskgregatorSettings {
   showChangelogOnUpdate: boolean;
   // Last plugin version whose changelog was shown (internal; not user-facing).
   lastSeenVersion: string;
+  // Navigation section ordering (ids from NAV_SECTIONS).
+  navOrder: string[];
+  // Navigation section ids the user hid.
+  navHidden: string[];
+  // Per-section count visibility (id -> show count).
+  navShowCounts: Record<string, boolean>;
 }
 
 export const DEFAULT_SETTINGS: TaskgregatorSettings = {
@@ -64,7 +75,6 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
   ],
   sidecarFolder: "Taskgregator/tasksData",
   dateFormat: "YYYY-MM-DD",
-  showCompleted: false,
   useEmojiMetadata: true,
   enableContextSidebar: true,
   startupView: "disabled",
@@ -73,7 +83,93 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
   taskFormat: "auto",
   showChangelogOnUpdate: true,
   lastSeenVersion: "",
+  navOrder: ["today", "tomorrow", "soon", "inbox", "flagged", "all", "inprogress", "completed"],
+  navHidden: [],
+  navShowCounts: {
+    today: true,
+    tomorrow: true,
+    soon: true,
+    inbox: true,
+    flagged: true,
+    all: true,
+    inprogress: true,
+    completed: true,
+  },
 };
+
+/** Imperative sub-page: reorder, show/hide, and toggle counts for nav sections. */
+class NavSectionsPage extends SettingPage {
+  plugin: Taskgregator;
+
+  constructor(plugin: Taskgregator) {
+    super();
+    this.plugin = plugin;
+    this.title = "Navigation sections";
+  }
+
+  display(): void {
+    const el = this.containerEl;
+    el.empty();
+    const order = this.plugin.settings.navOrder;
+    for (let i = 0; i < order.length; i++) {
+      const id = order[i];
+      const def = NAV_SECTIONS.find((d) => d.id === id);
+      const label = def ? def.label : id;
+      const hidden = this.plugin.settings.navHidden.includes(id);
+      const showCount = this.plugin.settings.navShowCounts[id] !== false;
+      const row = new Setting(el).setName(label);
+      row.addToggle((tg) =>
+        tg
+          .setValue(!hidden)
+          .setTooltip("Show section")
+          .onChange(async (v) => {
+            const h = this.plugin.settings.navHidden;
+            const hIdx = h.indexOf(id);
+            if (v && hIdx >= 0) h.splice(hIdx, 1);
+            if (!v && hIdx < 0) h.push(id);
+            await this.plugin.saveSettings();
+          })
+      );
+      row.addToggle((tg) =>
+        tg
+          .setValue(showCount)
+          .setTooltip("Show count")
+          .onChange(async (v) => {
+            this.plugin.settings.navShowCounts[id] = v;
+            await this.plugin.saveSettings();
+          })
+      );
+      row.addExtraButton((b) =>
+        b
+          .setIcon("chevron-up")
+          .setTooltip("Move up")
+          .onClick(async () => {
+            if (i === 0) return;
+            const arr = this.plugin.settings.navOrder;
+            const tmp = arr[i - 1];
+            arr[i - 1] = arr[i];
+            arr[i] = tmp;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+      row.addExtraButton((b) =>
+        b
+          .setIcon("chevron-down")
+          .setTooltip("Move down")
+          .onClick(async () => {
+            if (i === order.length - 1) return;
+            const arr = this.plugin.settings.navOrder;
+            const tmp = arr[i + 1];
+            arr[i + 1] = arr[i];
+            arr[i] = tmp;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+    }
+  }
+}
 
 export class TaskgregatorSettingTab extends PluginSettingTab {
   plugin: Taskgregator;
@@ -132,8 +228,10 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         control: { type: "text", key: "agingDays" },
       },
       {
-        name: "Show completed tasks",
-        control: { type: "toggle", key: "showCompleted" },
+        type: "page",
+        name: "Navigation sections",
+        desc: "Choose which lists appear in the side panel and their order.",
+        page: () => new NavSectionsPage(this.plugin),
       },
       {
         name: "Context sidebar",
@@ -185,8 +283,6 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         return String(s.soonDays);
       case "agingDays":
         return String(s.agingDays);
-      case "showCompleted":
-        return s.showCompleted;
       case "enableContextSidebar":
         return s.enableContextSidebar;
       case "showChangelogOnUpdate":
@@ -226,9 +322,6 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         break;
       case "agingDays":
         s.agingDays = clampDays(value, 14);
-        break;
-      case "showCompleted":
-        s.showCompleted = Boolean(value);
         break;
       case "enableContextSidebar":
         s.enableContextSidebar = Boolean(value);
@@ -350,15 +443,6 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
             this.plugin.settings.agingDays = clampDays(v, 14);
             await this.plugin.saveSettings();
           })
-      );
-
-    new Setting(containerEl)
-      .setName("Show completed tasks")
-      .addToggle((tg) =>
-        tg.setValue(this.plugin.settings.showCompleted).onChange(async (v) => {
-          this.plugin.settings.showCompleted = v;
-          await this.plugin.saveSettings();
-        })
       );
 
     new Setting(containerEl)

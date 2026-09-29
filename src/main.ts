@@ -9,9 +9,9 @@ import {
   toggleTagInLine,
   ensureBlockIdInLine,
   formatForLine,
-  sidecarPathFor,
 } from "./writer";
-import { parseLine } from "./parser";
+import { parseLine, NAV_SECTIONS } from "./parser";
+import { findSidecarFile } from "./sidecar";
 import { TaskgregatorView, VIEW_TYPE_TASKGREGATOR, ViewDeps } from "./view";
 import { TaskgregatorNavView, VIEW_TYPE_TASKGREGATOR_NAV } from "./navView";
 import { TaskgregatorState } from "./state";
@@ -173,13 +173,13 @@ export default class Taskgregator extends Plugin {
 
   /** Does a detail (sidecar) note exist for this block id? */
   private hasSidecar(blockId: string): boolean {
-    const path = sidecarPathFor(this.settings, blockId);
-    return this.app.vault.getAbstractFileByPath(path) instanceof TFile;
+    return findSidecarFile(this.app, this.settings, blockId) !== null;
   }
 
   /** Open the detail note for a block id (used by the inline note icons). */
   private openSidecarById(blockId: string): void {
-    void this.writer.openPath(sidecarPathFor(this.settings, blockId));
+    const f = findSidecarFile(this.app, this.settings, blockId);
+    if (f) void this.writer.openPath(f.path);
   }
 
   /**
@@ -345,7 +345,6 @@ export default class Taskgregator extends Plugin {
   ): void {
     const get = () => editor.getLine(lineNo);
     const set = (l: string) => editor.setLine(lineNo, l);
-    const titleOf = () => parseLine(get(), filePath, lineNo, this.settings)?.text || get();
 
     menu.addSeparator();
 
@@ -404,11 +403,12 @@ export default class Taskgregator extends Plugin {
         .setTitle("Taskgregator: Open detail note")
         .setIcon("sticky-note")
         .onClick(async () => {
-          const title = titleOf();
+          const parsed = parseLine(get(), filePath, lineNo, this.settings);
+          const title = parsed?.text || get();
           const { line: stamped, blockId } = ensureBlockIdInLine(get());
           if (stamped !== get()) set(stamped);
-          await this.writer.ensureSidecarFor(blockId, title, filePath);
-          await this.writer.openPath(sidecarPathFor(this.settings, blockId));
+          const path = await this.writer.ensureSidecarFor(blockId, title, filePath, parsed ?? undefined);
+          await this.writer.openPath(path);
         })
     );
 
@@ -430,6 +430,14 @@ export default class Taskgregator extends Plugin {
   async loadSettings(): Promise<void> {
     const data = (await this.loadData()) as Partial<TaskgregatorSettings> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
+    if (typeof this.settings.navShowCounts !== "object" || this.settings.navShowCounts === null)
+      this.settings.navShowCounts = { ...DEFAULT_SETTINGS.navShowCounts };
+    for (const def of NAV_SECTIONS) {
+      if (!this.settings.navOrder.includes(def.id))
+        this.settings.navOrder.push(def.id);
+      if (!(def.id in this.settings.navShowCounts))
+        this.settings.navShowCounts[def.id] = true;
+    }
   }
 
   async saveSettings(): Promise<void> {
