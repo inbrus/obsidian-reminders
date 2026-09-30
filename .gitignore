@@ -5,7 +5,3 @@ main.js
 .env
 .hotreload
 data.json
-
-# Local-only Obsidian review tooling (not shipped)
-eslint.config.mjs
-scripts/

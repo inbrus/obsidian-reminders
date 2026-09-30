@@ -1,9 +1,9 @@
 {
-  "id": "taskgregator",
-  "name": "Taskgregator",
-  "version": "3.1.2",
-  "minAppVersion": "1.7.2",
-  "description": "",
-  "author": "Her",
+  "id": "obsidian-reminders",
+  "name": "Obsidian Reminders",
+  "version": "1.0.0",
+  "minAppVersion": "1.13.0",
+  "description": "Aggregates your plain markdown checkboxes into smart lists, a context tree, and a context sidebar — tasks stay in your notes, no separate store.",
+  "author": "inbrus",
   "isDesktopOnly": false
 }
