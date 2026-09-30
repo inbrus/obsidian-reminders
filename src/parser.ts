@@ -27,6 +27,7 @@ const PRIORITY_EMOJI: Record<string, number> = {
   "🔺": 1, // highest
   "⏫": 2, // high
   "🔼": 3, // medium
+  "↔️": 4, // normal
   "🔽": 5, // low
   "⏬": 6, // lowest
 };
@@ -75,6 +76,8 @@ export const NAV_SECTIONS: { id: string; label: string; icon: string }[] = [
 export function statusFromChar(c: string): TaskStatus {
   if (c === "x" || c === "X") return "done";
   if (c === "/") return "inProgress";
+  if (c === "-") return "cancelled";
+  if (c === ">") return "forwarded";
   return "open";
 }
 

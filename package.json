@@ -1,28 +1,36 @@
 {
-  "name": "taskgregator",
-  "version": "3.1.2",
-  "description": "A Things3-style aggregator for native Obsidian tasks.",
+  "name": "obsidian-reminders",
+  "version": "1.0.0",
+  "description": "Aggregates your plain markdown checkboxes into smart lists, a context tree, and a context sidebar.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint src",
+    "test": "vitest run"
   },
   "keywords": [
     "obsidian",
     "obsidian-plugin",
     "tasks",
     "gtd",
-    "things3",
     "task-management"
   ],
-  "author": "Her",
+  "author": "inbrus",
   "license": "MIT",
   "devDependencies": {
     "@codemirror/state": "^6.0.0",
     "@codemirror/view": "^6.0.0",
+    "@eslint/js": "^9.39.5",
+    "@eslint/json": "^2.1.0",
     "@types/node": "^20.11.0",
     "esbuild": "^0.20.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.2",
     "obsidian": "latest",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
   }
 }

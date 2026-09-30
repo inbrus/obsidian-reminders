@@ -203,6 +203,7 @@
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
+  touch-action: manipulation;
 }
 .taskgregator .tg-check.is-doing {
   border-radius: 50%;

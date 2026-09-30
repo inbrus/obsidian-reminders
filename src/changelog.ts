@@ -1,10 +1,10 @@
-import { App, Component, MarkdownRenderer, Modal, normalizePath, requestUrl } from "obsidian";
+import { App, Component, MarkdownRenderer, Modal, normalizePath } from "obsidian";
 import type Taskgregator from "./main";
 
-// GitHub repo the plugin is published from. Community installs ship only
-// main.js/manifest.json/styles.css, so CHANGELOG.md and its screenshots aren't
-// present locally; we fetch/point at the raw files on `main` as a fallback.
-const REPO = "philpalmieri/obsidian-taskgregator";
+// Changelog is read only from the local plugin folder. Community installs ship
+// only main.js/manifest.json/styles.css, so when CHANGELOG.md is absent we link
+// out to the repo instead of fetching over the network (no requestUrl).
+const REPO = "inbrus/obsidian-reminders";
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main`;
 
 /**
@@ -60,8 +60,9 @@ export class ChangelogModal extends Modal {
   }
 
   /**
-   * Prefer the local CHANGELOG.md (present in dev / cloned installs); fall back
-   * to GitHub raw for community installs, where only the built artifacts ship.
+   * Read the local CHANGELOG.md (present in dev / cloned installs). Community
+   * installs don't ship it, so the caller falls back to a GitHub link. No
+   * network fetch — the plugin stays offline.
    */
   private async loadChangelogText(): Promise<string | null> {
     const path = normalizePath(`${this.pluginDir()}/CHANGELOG.md`);
@@ -70,13 +71,7 @@ export class ChangelogModal extends Modal {
         return await this.app.vault.adapter.read(path);
       }
     } catch {
-      /* fall through to the remote copy */
-    }
-    try {
-      const res = await requestUrl({ url: `${RAW_BASE}/CHANGELOG.md` });
-      if (res.status === 200) return res.text;
-    } catch {
-      /* offline or rate-limited: handled by the caller */
+      /* not present locally: handled by the caller */
     }
     return null;
   }

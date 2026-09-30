@@ -48,6 +48,7 @@ export const DV_PRIORITY_TO_NUM: Record<string, number> = {
   highest: 1,
   high: 2,
   medium: 3,
+  normal: 4,
   low: 5,
   lowest: 6,
 };
@@ -56,6 +57,7 @@ export const NUM_TO_DV_PRIORITY: Record<number, string> = {
   1: "highest",
   2: "high",
   3: "medium",
+  4: "normal",
   5: "low",
   6: "lowest",
 };

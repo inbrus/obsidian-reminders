@@ -64,3 +64,37 @@ export function toDDMMYYYY(iso: string): string {
 export function yamlEscape(s: string): string {
   return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
+
+/**
+ * YAML frontmatter + heading for a sidecar detail note. Pure function — no
+ * vault access, no personal paths. The template ships user-neutral: it links
+ * back to the source task and records block identity, priority, tags and
+ * status, with no hardcoded vault-relative references.
+ */
+export function sidecarFrontmatter(params: {
+  blockId: string;
+  date: string; // DD-MM-YYYY
+  sourceLink: string; // "path/to/note#^blockId"
+  title: string; // already stripped of tags and yaml-escaped
+  priorityHex: string; // "" or "#rrggbb"
+  tags: string[]; // bare tag names (without '#')
+  statusDone: boolean;
+}): string {
+  const tagsBlock = params.tags.map((t) => `  - "#${t}"`).join("\n");
+  const priorityLine = params.priorityHex
+    ? `priority-task: "${params.priorityHex}"\n`
+    : "";
+  return (
+    `---\n` +
+    `blockId: ${params.blockId}\n` +
+    `date: "[[${params.date}]]"\n` +
+    `source-task: "[[${params.sourceLink}|Source →]]"\n` +
+    `title-task: "${params.title}"\n` +
+    priorityLine +
+    `tags:\n` +
+    `${tagsBlock}\n` +
+    `status-task: ${params.statusDone ? "true" : "false"}\n` +
+    `---\n\n` +
+    `# ${params.title}\n`
+  );
+}

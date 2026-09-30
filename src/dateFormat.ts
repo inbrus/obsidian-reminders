@@ -34,6 +34,18 @@ export function fromIso(iso: string): string {
   return `${d}-${m}-${y}`;
 }
 
+/**
+ * YYYY-MM-DD for a Date using the LOCAL calendar. `new Date().toISOString()`
+ * renders UTC, so around midnight the date can drift to yesterday/tomorrow in
+ * non-UTC timezones. This keeps "today" aligned to the user's wall clock.
+ */
+export function localISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Find a date after an optional prefix (emoji), accepting wikilink or bare ISO. */
 export function findDateAfter(text: string, prefix?: string): string | undefined {
   if (!text) return undefined;

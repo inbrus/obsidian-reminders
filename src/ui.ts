@@ -2,7 +2,7 @@ import { App, Menu, Modal, setIcon } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskWriter } from "./writer";
 import { ALT_CHECKBOX_ICONS, nextStatusChar } from "./parser";
-import { toIso, fromIso } from "./dateFormat";
+import { toIso, fromIso, localISODate } from "./dateFormat";
 
 /**
  * Shared task-row rendering used by both the full Taskgregator hub view and the
@@ -22,7 +22,7 @@ export interface TaskRowCtx {
 }
 
 export function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate(new Date());
 }
 
 /** Whole days between a YYYY-MM-DD date and today (0 if today, negative future). */
@@ -52,7 +52,6 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   // Checkbox.
   const cb = row.createDiv({ cls: "tg-check" });
   cb.setAttr("data-status", task.statusChar);
-  cb.style.touchAction = "manipulation";
   const alt = ALT_CHECKBOX_ICONS[task.statusChar];
   if (alt) {
     setIcon(cb, alt.icon);
@@ -82,7 +81,7 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   let lpTimer: number | null = null;
   const cancelLp = () => {
     if (lpTimer) {
-      clearTimeout(lpTimer);
+      window.clearTimeout(lpTimer);
       lpTimer = null;
     }
   };
@@ -440,7 +439,7 @@ class DateModal extends Modal {
     const title = contentEl.createEl("h3", { text: this.label });
     title.addClass("tg-date-modal-title");
     const help = contentEl.createDiv({ cls: "tg-date-modal-hint" });
-    help.setText("Saved as [[DD-MM-YYYY]] wikilink.");
+    help.setText("Saved as [[dd-mm-yyyy]] wikilink.");
     const input = contentEl.createEl("input", { type: "date", cls: "tg-date-input" });
     input.value = this.value || "";
     input.focus();

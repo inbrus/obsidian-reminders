@@ -2,13 +2,14 @@ import { App, TFile, normalizePath } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskgregatorSettings } from "./settings";
 import { statusFromChar } from "./parser";
-import { wikilink, wikilinkAfter, stripDateAfter } from "./dateFormat";
+import { wikilink, wikilinkAfter, stripDateAfter, localISODate } from "./dateFormat";
 import {
   sidecarPathFor,
   findSidecarFile,
   cleanTitleForFile,
   stripTagsFromTitle,
   toDDMMYYYY,
+  sidecarFrontmatter,
   yamlEscape,
 } from "./sidecar";
 import {
@@ -27,8 +28,8 @@ const EMOJI_CANCELLED = "❌";
 // Tasks-plugin priority signifiers, highest first. Index 0 => level 1.
 const PRIORITY_EMOJI_HIGH = "⏫";
 const PRIORITY_EMOJI_LOW = "⏬";
-const PRIORITY_EMOJI = ["🔺", PRIORITY_EMOJI_HIGH, "🔼"];
-const ALL_PRIORITY_EMOJI = ["🔺", PRIORITY_EMOJI_HIGH, "🔼", "🔽", PRIORITY_EMOJI_LOW];
+const PRIORITY_EMOJI = ["🔺", PRIORITY_EMOJI_HIGH, "🔼", "↔️", "🔽", PRIORITY_EMOJI_LOW];
+const ALL_PRIORITY_EMOJI = ["🔺", PRIORITY_EMOJI_HIGH, "🔼", "↔️", "🔽", PRIORITY_EMOJI_LOW];
 // Emoji signifiers used to detect whether a line already uses the emoji format.
 const DETECT_EMOJI = ["📅", "🛫", "⏳", "➕", "✅", "❌", "🔁", ...ALL_PRIORITY_EMOJI];
 const CHECKBOX_RE = /^(\s*[-*+]\s+\[)(.)(\])/;
@@ -54,7 +55,7 @@ function setDvDateField(line: string, key: string, date: string | null): string 
 }
 
 export function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localISODate(new Date());
 }
 
 export function isTaskLine(line: string): boolean {
@@ -309,24 +310,16 @@ export class TaskWriter {
     const link = `${sourcePath.replace(/\.md$/i, "")}#^${blockId}`;
     const date = toDDMMYYYY(todayStr());
     const priorityHex = ["", "#e5484d", "#f5a623", "#4c9aff"][task?.priority || 0] || "";
-    const statusBool = task?.status === "done" ? "true" : "false";
-    const tagsBlock = (task?.tags || []).map((t) => `  - "#${t}"`).join("\n");
-    const body =
-      `---\n` +
-      `blockId: ${blockId}\n` +
-      `related:\n` +
-      `  - "[[Folders/Pages/Taskgregator|Taskgregator]]"\n` +
-      `date: "[[${date}]]"\n` +
-      `type: "[[Task]]"\n` +
-      `task-project:\n` +
-      `source-task: "[[${link}|Source →]]"\n` +
-      `title-task: "${yamlEscape(titleClean)}"\n` +
-      `priority-task:${priorityHex ? ` "${priorityHex}"` : ""}\n` +
-      `tags:\n` +
-      `${tagsBlock}\n` +
-      `status-task: ${statusBool}\n` +
-      `---\n\n` +
-      `# ${titleClean}\n`;
+    const statusDone = task?.status === "done";
+    const body = sidecarFrontmatter({
+      blockId,
+      date,
+      sourceLink: link,
+      title: yamlEscape(titleClean),
+      priorityHex,
+      tags: task?.tags || [],
+      statusDone,
+    });
     await this.app.vault.create(path, body);
     return path;
   }
