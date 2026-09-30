@@ -32,3 +32,19 @@
 - Тесты: Vitest + eslint-plugin-obsidianmd (CI-gate).
 
 См. также `docs/spec.md` (полная спецификация) после прохождения босс-теста.
+
+## Фаза 0 — отложенное (не в scope, зафиксировано 30-09-2026)
+
+Фаза 0 закрыта коммитом `6e0de4f`: tooling + golden-тесты + канонические фиксы.
+35 тестов зелёные, сборка зелёная, lint 0 ошибок. Остались 5 warnings — осознанно
+отложены, это не Фаза 0:
+
+1. `obsidianmd/ui/sentence-case` ×4 (settings.ts:472,473,496,497) — строки UI ещё
+   говорят `Taskgregator` / `Tasks`; требуют переименования бренда в
+   `Obsidian Reminders` (отдельный трек, не tooling-фаза).
+2. `obsidianmd/settings-tab/no-deprecated-display` (settings.ts:344) — метод
+   `display()` устарел при `minAppVersion 1.13.0` + `getSettingDefinitions()`,
+   но удалять его сейчас нельзя: он несёт кнопку Reindex. Удаляется в Фазе 2
+   (перенос настроек на declarative API).
+
+Незакоммиченного в ветке `refactor/phase-0-tooling` не осталось.
