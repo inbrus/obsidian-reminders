@@ -71,6 +71,7 @@ export function sidecarFrontmatter(params: {
   return (
     `---\n` +
     `blockId: ${params.blockId}\n` +
+    `schemaVersion: ${SIDECAR_SCHEMA_VERSION}\n` +
     `date: "[[${params.date}]]"\n` +
     `source-task: "[[${params.sourceLink}|Source →]]"\n` +
     `title-task: "${params.title}"\n` +
@@ -81,4 +82,49 @@ export function sidecarFrontmatter(params: {
     `---\n\n` +
     `# ${params.title}\n`
   );
+}
+
+/** Current sidecar schema version. Bump on any change to the frontmatter shape. */
+export const SIDECAR_SCHEMA_VERSION = 1;
+
+/** Parsed sidecar frontmatter fields the identity migration cares about. */
+export interface SidecarMeta {
+  blockId: string;
+  title: string;
+  sourcePath: string; // vault path of the source note, without extension or block ref
+  schemaVersion?: number;
+}
+
+/** Read a single `key: value` line from a YAML frontmatter block. */
+function readYamlField(frontmatter: string, key: string): string | undefined {
+  const m = frontmatter.match(new RegExp(`^${key}:\\s*(.*)$`, "m"));
+  if (!m) return undefined;
+  let v = m[1].trim();
+  v = v.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+  return v;
+}
+
+/** Extract the source note path from a `[[path#^id|alias]]` link. */
+function extractSourcePath(sourceLink: string): string {
+  const m = sourceLink.match(/\[\[([^#|\]]+)/);
+  return m ? m[1] : "";
+}
+
+/**
+ * Parse the frontmatter of a sidecar detail note. Returns null when the file
+ * isn't a recognized sidecar (no `blockId:` / `source-task:` pair).
+ */
+export function parseSidecarFrontmatter(content: string): SidecarMeta | null {
+  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return null;
+  const blockId = readYamlField(m[1], "blockId");
+  const source = readYamlField(m[1], "source-task");
+  if (!blockId || !source) return null;
+  const schemaRaw = readYamlField(m[1], "schemaVersion");
+  return {
+    blockId,
+    title: readYamlField(m[1], "title-task") ?? "",
+    sourcePath: extractSourcePath(source),
+    schemaVersion: schemaRaw ? Number(schemaRaw) : undefined,
+  };
 }

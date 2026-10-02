@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext, normalizePath } from "obsidian";
+import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext, normalizePath, Notice } from "obsidian";
 import { TaskgregatorSettings, DEFAULT_SETTINGS, TaskgregatorSettingTab } from "./settings";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./services/writer";
@@ -27,6 +27,7 @@ import { maybeShowChangelog, openChangelog } from "./changelog";
 import { buildMenu, priorityActions } from "./editor/menu";
 import { ObsidianStorage } from "./infra/obsidian-storage";
 import { IndexPersistence } from "./services/index-persistence";
+import { IdentityMigration, RepairReport } from "./services/identity-migration";
 
 export default class Taskgregator extends Plugin {
   settings!: TaskgregatorSettings;
@@ -40,6 +41,7 @@ export default class Taskgregator extends Plugin {
   private pendingRemoves = new Set<string>();
   private lastScopeKey = "";
   private persistence!: IndexPersistence;
+  private migration!: IdentityMigration;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -52,6 +54,7 @@ export default class Taskgregator extends Plugin {
       new ObsidianStorage(this.app),
       normalizePath(`${this.manifest.dir}/index.cache.json`)
     );
+    this.migration = new IdentityMigration(adapter, this.settings);
     this.sidecar = new SidecarService(adapter, clock, this.settings);
     const scanner = new VaultScanner(adapter, this.sidecar, this.settings);
     this.store = new TaskStore(scanner, adapter, clock, this.settings);
@@ -107,6 +110,26 @@ export default class Taskgregator extends Plugin {
       id: "reindex",
       name: "Reindex tasks",
       callback: () => this.reindex(),
+    });
+
+    this.addCommand({
+      id: "repair-identities",
+      name: "Repair identities (dry-run)",
+      callback: async () => {
+        const report = await this.migration.repairIdentities(true);
+        new Notice(this.formatRepairReport(report));
+        await this.reindex();
+      },
+    });
+
+    this.addCommand({
+      id: "repair-identities-write",
+      name: "Repair identities",
+      callback: async () => {
+        const report = await this.migration.repairIdentities(false);
+        new Notice(this.formatRepairReport(report));
+        await this.reindex();
+      },
     });
 
     this.addCommand({
@@ -374,6 +397,15 @@ export default class Taskgregator extends Plugin {
     await this.store.rebuild();
     await this.persistence.save(this.store.buildSnapshot());
     this.bus.emit("index:updated", { full: true });
+  }
+
+  private formatRepairReport(r: RepairReport): string {
+    const mode = r.dryRun ? "dry-run" : "applied";
+    return (
+      `Repair (${mode}): ${r.checked} sidecars checked — ` +
+      `${r.healthy} healthy, ${r.backfilled.length} backfilled, ` +
+      `${r.orphans.length} orphaned, ${r.schemaMigrated} schema-stamped`
+    );
   }
 
   /** Rescan just one file, merging its tasks into the store, then refresh. */

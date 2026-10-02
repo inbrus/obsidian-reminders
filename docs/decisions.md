@@ -154,10 +154,13 @@ rename → `removeFile(old)+applyFile(new)`, батчинг с дебаунсо�
 → rawText → text; жадный `ensureBlockId` ставит blockId при первом контакте со sidecar
 (уже был в писателе). sidecar-связь переживает сдвиг строк и правку текста.
 
-**Гейт:** 59 тестов, lint 0 ошибок / 5 отложенных warnings, build зелёный,
+**Гейт:** 63 теста, lint 0 ошибок / 5 отложенных warnings, build зелёный,
 `core+ports+services` без `obsidian`, `instanceof` только в адаптере.
 
-**Отложено (осознанно):** `IdentityMigration` (schemaVersion в sidecar YAML + команда
-«Repair identities» — backfill blockId, пометка осиротевших) — отдельный под-этап.
-Форк уже на blockId-схеме (legacy line-id данных нет); backfill — деструктивная
-операция над markdown, по канону требует dry-run + одобрение Johan.
+**IdentityMigration (`services/identity-migration.ts`):** sidecar-frontmatter получает
+`schemaVersion: 1`; `parseSidecarFrontmatter` читает `blockId`/`sourcePath`/`title`.
+Команды «Repair identities (dry-run)» и «Repair identities» сверяют каждый sidecar с
+исходной строкой: stamp schemaVersion, backfill `^blockId` (по title-совпадению),
+помечают осиротевшие. Dry-run по умолчанию; запись идемпотентна (не трогает формат
+markdown, кроме добавления `^blockId`). Форк уже на blockId-схеме — legacy line-id
+данных нет, поэтому reconcile ограничен backfill + orphan-разметкой.

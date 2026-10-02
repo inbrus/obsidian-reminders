@@ -16,6 +16,8 @@ import { VaultScanner } from "../src/services/scanner";
 import { TaskStore } from "../src/store";
 import { IStorage } from "../src/ports/storage";
 import { IndexPersistence, IndexSnapshot, INDEX_SCHEMA_VERSION } from "../src/services/index-persistence";
+import { IdentityMigration } from "../src/services/identity-migration";
+import { parseSidecarFrontmatter, sidecarFrontmatter, SIDECAR_SCHEMA_VERSION } from "../src/core/sidecar";
 
 class FakeClock implements IClock {
   constructor(private iso: string) {}
@@ -277,5 +279,65 @@ describe("IndexPersistence over IStorage", () => {
     await store.rebuild(snapshot);
 
     expect(store.visible().map((t) => t.text).sort()).toEqual(["Alpha", "Beta v2"]);
+  });
+});
+
+describe("IdentityMigration", () => {
+  function sidecar(blockId: string, title: string, sourcePath: string): string {
+    return sidecarFrontmatter({
+      blockId,
+      date: "30-09-2026",
+      sourceLink: `${sourcePath}#^${blockId}`,
+      title,
+      priorityHex: "",
+      tags: [],
+      statusDone: false,
+    });
+  }
+
+  it("parseSidecarFrontmatter reads blockId/source/schema", () => {
+    const meta = parseSidecarFrontmatter(sidecar("tg1", "Ship it", "Projects/A"));
+    expect(meta?.blockId).toBe("tg1");
+    expect(meta?.sourcePath).toBe("Projects/A");
+    expect(meta?.schemaVersion).toBe(SIDECAR_SCHEMA_VERSION);
+  });
+
+  it("dry-run reports backfill and orphans without writing", async () => {
+    const adapter = new FakeAdapter();
+    const migration = new IdentityMigration(adapter, SETTINGS);
+
+    adapter.files.set("Projects/A.md", "- [ ] Ship it");
+    adapter.files.set("Notes/Tasks/Ship it – Task tg1.md", sidecar("tg1", "Ship it", "Projects/A"));
+    // Orphan: source note missing entirely.
+    adapter.files.set("Notes/Tasks/Gone – Task tg2.md", sidecar("tg2", "Gone", "Projects/Gone"));
+
+    const report = await migration.repairIdentities(true);
+    expect(report.checked).toBe(2);
+    expect(report.backfilled).toContain("Projects/A");
+    expect(report.orphans).toContain("Notes/Tasks/Gone – Task tg2.md");
+    // dry-run: no writes.
+    expect(adapter.files.get("Projects/A.md")).toBe("- [ ] Ship it");
+  });
+
+  it("write mode appends the missing block id", async () => {
+    const adapter = new FakeAdapter();
+    const migration = new IdentityMigration(adapter, SETTINGS);
+    adapter.files.set("Projects/A.md", "- [ ] Ship it");
+    adapter.files.set("Notes/Tasks/Ship it – Task tg1.md", sidecar("tg1", "Ship it", "Projects/A"));
+
+    await migration.repairIdentities(false);
+    expect(adapter.files.get("Projects/A.md")).toBe("- [ ] Ship it ^tg1");
+  });
+
+  it("healthy sidecar needs no repair", async () => {
+    const adapter = new FakeAdapter();
+    const migration = new IdentityMigration(adapter, SETTINGS);
+    adapter.files.set("Projects/A.md", "- [ ] Ship it ^tg1");
+    adapter.files.set("Notes/Tasks/Ship it – Task tg1.md", sidecar("tg1", "Ship it", "Projects/A"));
+
+    const report = await migration.repairIdentities(true);
+    expect(report.healthy).toBe(1);
+    expect(report.backfilled).toHaveLength(0);
+    expect(report.orphans).toHaveLength(0);
   });
 });
