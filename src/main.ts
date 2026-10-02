@@ -18,17 +18,20 @@ import { ObsidianClock } from "./infra/obsidian-clock";
 import { getTasksPluginFormat } from "./tasksInterop";
 import { TaskgregatorView, VIEW_TYPE_TASKGREGATOR, ViewDeps } from "./view";
 import { TaskgregatorNavView, VIEW_TYPE_TASKGREGATOR_NAV } from "./navView";
-import { TaskgregatorState } from "./state";
+import { UiStateStore } from "./services/selection";
+import { EventBus } from "./services/event-bus";
 import { promptDate } from "./ui";
 import { TaskgregatorContextView, VIEW_TYPE_TASKGREGATOR_CONTEXT } from "./contextView";
 import { noteIconLivePreview } from "./livePreview";
 import { maybeShowChangelog, openChangelog } from "./changelog";
+import { buildMenu, priorityActions } from "./editor/menu";
 
 export default class Taskgregator extends Plugin {
   settings!: TaskgregatorSettings;
   store!: TaskStore;
   writer!: TaskWriter;
-  state!: TaskgregatorState;
+  state!: UiStateStore;
+  bus!: EventBus;
   private sidecar!: SidecarService;
   private refreshTimer: number | null = null;
 
@@ -48,25 +51,19 @@ export default class Taskgregator extends Plugin {
       this.settings,
       () => getTasksPluginFormat(this.app)
     );
-    this.state = new TaskgregatorState();
+    this.bus = new EventBus();
+    this.state = new UiStateStore(this.bus);
 
     const deps: ViewDeps = {
       store: this.store,
       writer: this.writer,
       settings: this.settings,
       state: this.state,
+      bus: this.bus,
+      reindex: () => this.reindex(),
       reindexFile: async (path: string) => this.reindexFile(path),
-      refresh: () => {
-        void this.reindex();
-      },
       openList: () => this.openList(),
-      rerenderAll: () => this.refreshViews(),
-      rerenderList: () => {
-        for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR)) {
-          const view = leaf.view;
-          if (view instanceof TaskgregatorView) view.render();
-        }
-      },
+      getNote: (path: string) => adapter.getNote(path),
     };
 
     this.registerView(
@@ -171,7 +168,7 @@ export default class Taskgregator extends Plugin {
             : { type: "all" };
         await this.activateView();
       }
-      this.refreshViews();
+      this.bus.emit("index:updated", { full: true });
       void maybeShowChangelog(this);
     });
   }
@@ -267,7 +264,7 @@ export default class Taskgregator extends Plugin {
 
     // List lives in the center.
     await this.openList();
-    this.refreshViews();
+    this.bus.emit("index:updated", { full: true });
     if (nav) await workspace.revealLeaf(nav);
   }
 
@@ -313,10 +310,7 @@ export default class Taskgregator extends Plugin {
   }
 
   private setContextFile(file: TFile | null): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR_CONTEXT)) {
-      const view = leaf.view;
-      if (view instanceof TaskgregatorContextView) view.setFile(file);
-    }
+    this.bus.emit("file:changed", { path: file?.path ?? null });
   }
 
   private scheduleRefresh(): void {
@@ -329,29 +323,14 @@ export default class Taskgregator extends Plugin {
 
   async reindex(): Promise<void> {
     await this.store.rebuild();
-    this.refreshViews();
+    this.bus.emit("index:updated", { full: true });
   }
 
   /** Rescan just one file, merging its tasks into the store, then refresh. */
   async reindexFile(_path: string): Promise<void> {
     // Simplicity + correctness: rebuild fully. Vault scans are cheap (cachedRead).
     await this.store.rebuild();
-    this.refreshViews();
-  }
-
-  private refreshViews(): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR_NAV)) {
-      const view = leaf.view;
-      if (view instanceof TaskgregatorNavView) view.render();
-    }
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR)) {
-      const view = leaf.view;
-      if (view instanceof TaskgregatorView) view.render();
-    }
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR_CONTEXT)) {
-      const view = leaf.view;
-      if (view instanceof TaskgregatorContextView) view.render();
-    }
+    this.bus.emit("index:updated", { full: true });
   }
 
   private addTaskMenuItems(
@@ -363,85 +342,63 @@ export default class Taskgregator extends Plugin {
     const get = () => editor.getLine(lineNo);
     const set = (l: string) => editor.setLine(lineNo, l);
 
-    menu.addSeparator();
+    const currentPrio = () => {
+      const cur = parseLine(get(), filePath, lineNo, this.settings)?.priority ?? 0;
+      return cur >= 1 && cur <= 3 ? cur : cur > 3 ? 3 : 0;
+    };
+    const setPrio = async (lvl: number) => {
+      const def = await this.writer.resolveDefaultFormat();
+      set(applyPriorityToLine(get(), lvl, this.settings.priorityTags, formatForLine(get(), def)));
+    };
 
-    // Priority: submenu if supported, otherwise flat items.
-    menu.addItem((item) => {
-      item.setTitle("Taskgregator: Priority").setIcon("flag");
-      const levels: Array<[string, number]> = [
-        ["None", 0],
-        ["P1 (high)", 1],
-        ["P2 (medium)", 2],
-        ["P3 (low)", 3],
-      ];
-      const sub = (item as unknown as { setSubmenu?: () => Menu }).setSubmenu?.();
-      if (sub) {
-        for (const [label, lvl] of levels) {
-          sub.addItem((s) =>
-            s.setTitle(label).onClick(async () => {
-              const def = await this.writer.resolveDefaultFormat();
-              set(applyPriorityToLine(get(), lvl, this.settings.priorityTags, formatForLine(get(), def)));
-            })
-          );
-        }
-      } else {
-        // Fallback: single click cycles priority.
-        item.onClick(async () => {
-          const cur = parseLine(get(), filePath, lineNo, this.settings)?.priority ?? 0;
-          const c = cur >= 1 && cur <= 3 ? cur : cur > 3 ? 3 : 0;
-          const def = await this.writer.resolveDefaultFormat();
-          set(applyPriorityToLine(get(), (c + 1) % 4, this.settings.priorityTags, formatForLine(get(), def)));
-        });
-      }
-    });
-
-    menu.addItem((i) =>
-      i
-        .setTitle("Taskgregator: Set due date…")
-        .setIcon("calendar")
-        .onClick(async () => {
+    buildMenu(menu, [
+      { separator: true },
+      {
+        title: "Taskgregator: Priority",
+        icon: "flag",
+        submenu: priorityActions(currentPrio(), (lvl) => void setPrio(lvl)),
+      },
+      {
+        title: "Taskgregator: Set due date…",
+        icon: "calendar",
+        onClick: async () => {
           const d = await promptDate(this.app, "Due date");
           if (d !== undefined) {
             const def = await this.writer.resolveDefaultFormat();
             set(applyDueToLine(get(), d, formatForLine(get(), def)));
           }
-        })
-    );
-
-    menu.addItem((i) =>
-      i
-        .setTitle("Taskgregator: Toggle #today")
-        .setIcon("star")
-        .onClick(() => set(toggleTagInLine(get(), "today")))
-    );
-
-    menu.addItem((i) =>
-      i
-        .setTitle("Taskgregator: Open detail note")
-        .setIcon("sticky-note")
-        .onClick(async () => {
+        },
+      },
+      {
+        title: "Taskgregator: Toggle #today",
+        icon: "star",
+        onClick: () => set(toggleTagInLine(get(), "today")),
+      },
+      {
+        title: "Taskgregator: Open detail note",
+        icon: "sticky-note",
+        onClick: async () => {
           const parsed = parseLine(get(), filePath, lineNo, this.settings);
           const title = parsed?.text || get();
           const { line: stamped, blockId } = ensureBlockIdInLine(get());
           if (stamped !== get()) set(stamped);
           const path = await this.writer.ensureSidecarFor(blockId, title, filePath, parsed ?? undefined);
           await this.writer.openPath(path);
-        })
-    );
-
-    menu.addItem((i) =>
-      i
-        .setTitle("Taskgregator: Reveal in task list")
-        .setIcon("check-check")
-        .onClick(async () => {
+        },
+      },
+      {
+        title: "Taskgregator: Reveal in task list",
+        icon: "check-check",
+        onClick: async () => {
           await this.activateView();
           for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR)) {
             const v = leaf.view;
             if (v instanceof TaskgregatorView) v.revealTask(filePath);
           }
-          this.refreshViews();
-        })
-    );
+          this.bus.emit("index:updated", { full: true });
+        },
+      },
+    ]);
   }
 
   async loadSettings(): Promise<void> {
@@ -459,6 +416,7 @@ export default class Taskgregator extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    this.bus.emit("settings:changed", undefined);
     await this.reindex();
   }
 }

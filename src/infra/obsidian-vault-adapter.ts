@@ -15,6 +15,12 @@ export class ObsidianVaultAdapter implements IVaultAdapter, ILinkResolver {
     return f instanceof TFile && f.extension === "md";
   }
 
+  /** Resolve a vault path to its note, or null. (instanceof gate; used by presentation.) */
+  getNote(path: string): TFile | null {
+    const f = this.app.vault.getAbstractFileByPath(path);
+    return f instanceof TFile ? f : null;
+  }
+
   async scopedFiles(
     bucketRoots: string[],
     inboxRoots: string[]

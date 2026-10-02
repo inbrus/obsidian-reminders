@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import { TreeNode } from "./types";
 import { ViewDeps } from "./view";
 import { NAV_SECTIONS } from "./parser";
-import { Selection } from "./state";
+import { Selection } from "./core/models";
 
 export const VIEW_TYPE_TASKGREGATOR_NAV = "taskgregator-nav-view";
 
@@ -14,6 +14,7 @@ export const VIEW_TYPE_TASKGREGATOR_NAV = "taskgregator-nav-view";
 export class TaskgregatorNavView extends ItemView {
   deps: ViewDeps;
   private searchInput: HTMLInputElement | null = null;
+  private unsubscribers: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, deps: ViewDeps) {
     super(leaf);
@@ -36,13 +37,22 @@ export class TaskgregatorNavView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.contentEl.addClass("taskgregator", "tg-nav-view");
+    this.unsubscribers = [
+      this.deps.bus.on("index:updated", () => this.render()),
+      this.deps.bus.on("selection:changed", () => this.render()),
+      this.deps.bus.on("settings:changed", () => this.render()),
+    ];
     this.render();
   }
 
-  /** Set the selection, reveal the list, and re-render all views. */
+  async onClose(): Promise<void> {
+    for (const u of this.unsubscribers) u();
+    this.unsubscribers = [];
+  }
+
+  /** Set the selection (emits selection:changed) and reveal the list. */
   private choose(): void {
     void this.deps.openList();
-    this.deps.rerenderAll();
   }
 
   render(): void {
@@ -124,16 +134,14 @@ export class TaskgregatorNavView extends ItemView {
     const apply = (query: string): void => {
       this.state.searchQuery = query;
       clearBtn.toggle(query.length > 0);
-      // Ensure the list is visible, then re-render only the list so this input
-      // keeps focus while typing.
+      // Ensure the list is visible; searchQuery emits search:changed so the list
+      // re-renders while this input keeps focus.
       void this.deps.openList();
-      this.deps.rerenderList();
     };
 
     const clear = (): void => {
       input.value = "";
       this.state.searchQuery = "";
-      this.deps.rerenderAll();
     };
 
     input.addEventListener("input", () => apply(input.value));
@@ -146,7 +154,7 @@ export class TaskgregatorNavView extends ItemView {
     const reload = wrap.createSpan({ cls: "tg-icon-btn" });
     setIcon(reload, "refresh-cw");
     reload.setAttr("aria-label", "Reindex");
-    reload.onclick = () => this.deps.refresh();
+    reload.onclick = () => void this.deps.reindex();
 
     if (keepFocus) {
       input.focus();

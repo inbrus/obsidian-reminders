@@ -96,3 +96,33 @@ VaultScanner на фейковом адаптере+часах), lint 0 ошиб
 - `ViewDeps` (колбеки view↔main) выпиливается в Фазе 3 вместе с событийной шиной.
 - Замороженный снапшот настроек (SettingsService) — Фаза 4.
 - `display()` в settings.ts (1 warning) — удаляется при переходе настроек на declarative API.
+
+## Фаза 3 — событийная шина и UiStateStore
+
+Ручные колбеки (`refreshViews`/`rerenderAll`/`rerenderList`/`ViewDeps.rerender`) заменены
+типизированной шиной событий.
+
+**Шина (`services/event-bus.ts`, чистая, без `obsidian`):**
+- `index:updated` (`{ full: boolean }`) — индекс пересобран (reindex/reindexFile).
+- `settings:changed` — настройки сохранены.
+- `selection:changed` / `search:changed` — UI-селекция/поиск.
+- `file:changed` (`{ path: string | null }`) — смена активного файла.
+
+**UiStateStore (`services/selection.ts`):**
+- Заменяет `TaskgregatorState` (`src/state.ts` удалён). Держит `selection`, `searchQuery`,
+  `sortBy`, `sortDir`, `sortExplicit`, `groupBy`, `collapsed`; сеттеры `selection`/`searchQuery`
+  эмитят события в шину, поэтому view реагируют декларативно, без явных `render()`.
+
+**View/context:** `TaskgregatorView`/`TaskgregatorNavView`/`TaskgregatorContextView` подписываются
+на шину в `onOpen` и отписываются в `onClose`. `ViewDeps` больше не несёт `rerender`/`refresh`/
+`rerenderAll`/`rerenderList` — остались только команды-контроллеры (`reindex`, `reindexFile`,
+`openList`, `getNote`). Резолв активного файла вынесен в `adapter.getNote(path): TFile | null`,
+так что `instanceof TFile/TFolder` по-прежнему живёт только в `infra/obsidian-vault-adapter.ts`.
+
+**MenuBuilder (`editor/menu.ts`):** оба меню — editor context menu (`main.ts`) и task-row menu
+(`ui.ts`) — собираются из одного реестра `ActionDescriptor[]` через `buildMenu` (submenu +
+flat-fallback в одном месте). Дубль priority/due/tag/note-действий устранён; общий
+`priorityActions()` для submenu приоритетов.
+
+**Гейт:** 53 теста, lint 0 ошибок / 5 отложенных warnings, build зелёный,
+`core+ports+services` не импортируют `obsidian`, `instanceof` только в адаптере.

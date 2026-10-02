@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from "obsidian";
 import { ViewDeps, sortTasksBy } from "./view";
 import { computeContext, ContextScope, DueFilter } from "./context";
-import { SortKey } from "./state";
+import { SortKey } from "./core/models";
 import { TaskItem } from "./types";
 import { TaskRowCtx, renderTaskRow } from "./ui";
 import { localISODate } from "./dateFormat";
@@ -39,6 +39,7 @@ const SORT_OPTIONS: [SortKey, string][] = [
 export class TaskgregatorContextView extends ItemView {
   deps: ViewDeps;
   file: TFile | null = null;
+  private unsubscribers: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, deps: ViewDeps) {
     super(leaf);
@@ -57,7 +58,19 @@ export class TaskgregatorContextView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.contentEl.addClass("taskgregator", "tg-context");
+    this.unsubscribers = [
+      this.deps.bus.on("index:updated", () => this.render()),
+      this.deps.bus.on("settings:changed", () => this.render()),
+      this.deps.bus.on("file:changed", ({ path }) => {
+        this.setFile(path ? this.deps.getNote(path) : null);
+      }),
+    ];
     this.render();
+  }
+
+  async onClose(): Promise<void> {
+    for (const u of this.unsubscribers) u();
+    this.unsubscribers = [];
   }
 
   /** Point the panel at a file (called as the active file changes). */
@@ -108,12 +121,10 @@ export class TaskgregatorContextView extends ItemView {
       app: this.app,
       writer: this.deps.writer,
       reindexFile: this.deps.reindexFile,
-      rerender: () => this.render(),
       agingDays: this.deps.settings.agingDays,
       onTagClick: (tag: string) => {
         this.deps.state.selection = { type: "smart", tag, label: "#" + tag };
         void this.deps.openList();
-        this.deps.rerenderAll();
       },
     };
   }

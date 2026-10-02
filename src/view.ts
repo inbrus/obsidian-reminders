@@ -1,11 +1,13 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
 import { TaskItem, TreeNode } from "./types";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./services/writer";
 import { nodeKeyForFile } from "./parser";
 import { TaskgregatorSettings } from "./settings";
 import { TaskRowCtx, renderTaskRow, promptDate } from "./ui";
-import { Selection, SortKey, GroupKey, TaskgregatorState } from "./state";
+import { Selection, SortKey, GroupKey } from "./core/models";
+import { UiStateStore } from "./services/selection";
+import { EventBus } from "./services/event-bus";
 import { sortTasksBy, groupTasks } from "./core/query";
 
 export { promptDate };
@@ -38,17 +40,16 @@ export interface ViewDeps {
   store: TaskStore;
   writer: TaskWriter;
   settings: TaskgregatorSettings;
-  state: TaskgregatorState;
+  state: UiStateStore;
+  bus: EventBus;
+  // Full reindex (Reindex command / button). Emits index:updated.
+  reindex: () => Promise<void>;
+  // Rebuild the index for one file (a writer edit happened). Emits index:updated.
   reindexFile: (path: string) => Promise<void>;
-  // Reindex the vault, then re-render every view.
-  refresh: () => void;
-  // Ensure/reveal the center list view (called when a nav item is chosen).
+  // Ensure/reveal the center list view (a nav item was chosen).
   openList: () => Promise<void>;
-  // Re-render nav + list + context views without reindexing.
-  rerenderAll: () => void;
-  // Re-render only the center list view(s) (used by search-as-you-type so the
-  // nav's search input keeps focus).
-  rerenderList: () => void;
+  // Resolve a vault path to its TFile (presentation; active-file follow).
+  getNote: (path: string) => TFile | null;
 }
 
 /**
@@ -58,13 +59,14 @@ export interface ViewDeps {
 export class TaskgregatorView extends ItemView {
   deps: ViewDeps;
   mainEl!: HTMLElement;
+  private unsubscribers: Array<() => void> = [];
 
   constructor(leaf: WorkspaceLeaf, deps: ViewDeps) {
     super(leaf);
     this.deps = deps;
   }
 
-  private get state(): TaskgregatorState {
+  private get state(): UiStateStore {
     return this.deps.state;
   }
 
@@ -83,7 +85,18 @@ export class TaskgregatorView extends ItemView {
     root.empty();
     root.addClass("taskgregator", "tg-list-view");
     this.mainEl = root.createDiv({ cls: "tg-main" });
+    this.unsubscribers = [
+      this.deps.bus.on("index:updated", () => this.render()),
+      this.deps.bus.on("selection:changed", () => this.render()),
+      this.deps.bus.on("search:changed", () => this.render()),
+      this.deps.bus.on("settings:changed", () => this.render()),
+    ];
     this.render();
+  }
+
+  async onClose(): Promise<void> {
+    for (const u of this.unsubscribers) u();
+    this.unsubscribers = [];
   }
 
   render(): void {
@@ -94,12 +107,12 @@ export class TaskgregatorView extends ItemView {
   revealTask(filePath: string): void {
     const { fileKey, flat, rootName } = nodeKeyForFile(filePath, this.deps.settings);
     const base = filePath.split("/").pop()?.replace(/\.md$/i, "") || filePath;
+    // Setting selection emits "selection:changed", which re-renders this view.
     this.state.selection = {
       type: "node",
       key: fileKey,
       label: flat ? rootName : base,
     };
-    this.render();
   }
 
   private rowCtx(): TaskRowCtx {
@@ -107,12 +120,10 @@ export class TaskgregatorView extends ItemView {
       app: this.app,
       writer: this.deps.writer,
       reindexFile: this.deps.reindexFile,
-      rerender: () => this.render(),
       agingDays: this.deps.settings.agingDays,
       onTagClick: (tag: string) => {
         this.state.selection = { type: "smart", tag, label: "#" + tag };
         void this.deps.openList();
-        this.deps.rerenderAll();
       },
     };
   }
@@ -208,7 +219,6 @@ export class TaskgregatorView extends ItemView {
     const clear = bar.createSpan({ cls: "tg-search-clear", text: "clear" });
     clear.onclick = () => {
       this.state.searchQuery = "";
-      this.deps.rerenderAll();
     };
   }
 

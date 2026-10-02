@@ -3,6 +3,7 @@ import { TaskItem } from "./types";
 import { TaskWriter } from "./services/writer";
 import { ALT_CHECKBOX_ICONS, nextStatusChar } from "./parser";
 import { toIso, fromIso, localISODate } from "./dateFormat";
+import { buildMenu, priorityActions } from "./editor/menu";
 
 /**
  * Shared task-row rendering used by both the full Taskgregator hub view and the
@@ -12,7 +13,10 @@ export interface TaskRowCtx {
   app: App;
   writer: TaskWriter;
   reindexFile: (path: string) => Promise<void>;
-  rerender: () => void;
+  // Re-render after a change. Optional: with the event bus, reindexFile emits
+  // "index:updated" and the host view re-renders itself, so this is only a
+  // fallback for hosts that don't subscribe.
+  rerender?: () => void;
   // Age (in days) at/above which the created-age chip turns "aged" (warning
   // color) instead of the neutral grey. Mirrors the Aging smart list threshold.
   agingDays: number;
@@ -64,7 +68,7 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   cb.onclick = async () => {
     await ctx.writer.setStatus(task, nextStatusChar(task.statusChar));
     await ctx.reindexFile(task.filePath);
-    ctx.rerender();
+    ctx.rerender?.();
   };
   cb.oncontextmenu = (e) => {
     e.preventDefault();
@@ -145,7 +149,7 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
     const next = (cur + 1) % 4;
     await ctx.writer.setPriority(task, next);
     await ctx.reindexFile(task.filePath);
-    ctx.rerender();
+    ctx.rerender?.();
   };
 
   // Actions menu (also available via right-click on the row).
@@ -161,119 +165,73 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
 function taskMenu(e: MouseEvent, task: TaskItem, ctx: TaskRowCtx): void {
   const menu = new Menu();
 
-  // Priority: submenu if the platform supports it, else flat P1..P3 + None.
-  menu.addItem((item) => {
-    item.setTitle("Priority").setIcon("flag");
-    const levels: Array<[string, number]> = [
-      ["None", 0],
-      ["P1 (high)", 1],
-      ["P2 (medium)", 2],
-      ["P3 (low)", 3],
-    ];
-    const setPrio = async (lvl: number) => {
-      await ctx.writer.setPriority(task, lvl);
-      await ctx.reindexFile(task.filePath);
-      ctx.rerender();
-    };
-    const sub = (item as unknown as { setSubmenu?: () => Menu }).setSubmenu?.();
-    if (sub) {
-      for (const [label, lvl] of levels) {
-        sub.addItem((s) =>
-          s.setTitle(label).setChecked(task.priority === lvl).onClick(() => void setPrio(lvl))
-        );
-      }
-    } else {
-      item.onClick(() => {
-        const cur = task.priority >= 1 && task.priority <= 3 ? task.priority : task.priority > 3 ? 3 : 0;
-        void setPrio((cur + 1) % 4);
-      });
-    }
-  });
+  const setPrio = async (lvl: number) => {
+    await ctx.writer.setPriority(task, lvl);
+    await ctx.reindexFile(task.filePath);
+  };
+  const setType = async (ch: string) => {
+    await ctx.writer.setStatus(task, ch);
+    await ctx.reindexFile(task.filePath);
+  };
+  const setDate = (kind: "due" | "start") => async () => {
+    const current = kind === "due" ? task.meta.due : task.meta.start;
+    const d = await promptDate(ctx.app, kind === "due" ? "Due date" : "Start date", current);
+    if (d === undefined) return;
+    const iso = d === null ? null : toIso(d) ?? d;
+    if (kind === "due") await ctx.writer.setDue(task, iso);
+    else await ctx.writer.setStart(task, iso);
+    await ctx.reindexFile(task.filePath);
+  };
 
-  menu.addSeparator();
-
-  // Type: alternative checkbox statuses (Anything-style).
-  menu.addItem((item) => {
-    item.setTitle("Type").setIcon("tag");
-    const setType = async (ch: string) => {
-      await ctx.writer.setStatus(task, ch);
-      await ctx.reindexFile(task.filePath);
-      ctx.rerender();
-    };
-    const sub = (item as unknown as { setSubmenu?: () => Menu }).setSubmenu?.();
-    if (sub) {
-      for (const [ch, def] of Object.entries(ALT_CHECKBOX_ICONS)) {
-        sub.addItem((s) =>
-          s
-            .setTitle(def.label)
-            .setIcon(def.icon)
-            .setChecked(task.statusChar === ch)
-            .onClick(() => void setType(ch))
-        );
-      }
-    } else {
-      item.setDisabled(true);
-      for (const [ch, def] of Object.entries(ALT_CHECKBOX_ICONS)) {
-        menu.addItem((s) =>
-          s
-            .setTitle(def.label)
-            .setIcon(def.icon)
-            .setChecked(task.statusChar === ch)
-            .onClick(() => void setType(ch))
-        );
-      }
-    }
-  });
-
-  menu.addItem((i) =>
-    i.setTitle("Set due date").setIcon("calendar").onClick(async () => {
-      const d = await promptDate(ctx.app, "Due date", task.meta.due);
-      if (d === undefined) return;
-      const iso = d === null ? null : toIso(d) ?? d;
-      await ctx.writer.setDue(task, iso);
-      await ctx.reindexFile(task.filePath);
-      ctx.rerender();
-    })
-  );
-  menu.addItem((i) =>
-    i.setTitle("Set start date").setIcon("plane").onClick(async () => {
-      const d = await promptDate(ctx.app, "Start date", task.meta.start);
-      if (d === undefined) return;
-      const iso = d === null ? null : toIso(d) ?? d;
-      await ctx.writer.setStart(task, iso);
-      await ctx.reindexFile(task.filePath);
-      ctx.rerender();
-    })
-  );
-  menu.addItem((i) =>
-    i
-      .setTitle("Toggle #today")
-      .setIcon("star")
-      .setChecked(task.tags.includes("today"))
-      .onClick(async () => {
+  buildMenu(menu, [
+    {
+      title: "Priority",
+      icon: "flag",
+      submenu: priorityActions(task.priority, (lvl) => void setPrio(lvl)),
+    },
+    { separator: true },
+    {
+      title: "Type",
+      icon: "tag",
+      submenu: Object.entries(ALT_CHECKBOX_ICONS).map(([ch, def]) => ({
+        title: def.label,
+        icon: def.icon,
+        checked: task.statusChar === ch,
+        onClick: () => void setType(ch),
+      })),
+    },
+    { title: "Set due date", icon: "calendar", onClick: () => void setDate("due")() },
+    { title: "Set start date", icon: "plane", onClick: () => void setDate("start")() },
+    {
+      title: "Toggle #today",
+      icon: "star",
+      checked: task.tags.includes("today"),
+      onClick: async () => {
         await ctx.writer.toggleTag(task, "today");
         await ctx.reindexFile(task.filePath);
-        ctx.rerender();
-      })
-  );
-  menu.addSeparator();
-  menu.addItem((i) =>
-    i.setTitle("Open detail note").setIcon("sticky-note").onClick(async () => {
-      await ctx.writer.openSidecar(task);
-      await ctx.reindexFile(task.filePath);
-    })
-  );
-  menu.addItem((i) =>
-    i.setTitle("Jump to source").setIcon("arrow-up-right").onClick(() => jumpToSource(ctx.app, task))
-  );
-  menu.addSeparator();
-  menu.addItem((i) =>
-    i.setTitle("Cancel task").setIcon("x").onClick(async () => {
-      await ctx.writer.setStatus(task, "-");
-      await ctx.reindexFile(task.filePath);
-      ctx.rerender();
-    })
-  );
+      },
+    },
+    { separator: true },
+    {
+      title: "Open detail note",
+      icon: "sticky-note",
+      onClick: async () => {
+        await ctx.writer.openSidecar(task);
+        await ctx.reindexFile(task.filePath);
+      },
+    },
+    { title: "Jump to source", icon: "arrow-up-right", onClick: () => jumpToSource(ctx.app, task) },
+    { separator: true },
+    {
+      title: "Cancel task",
+      icon: "x",
+      onClick: async () => {
+        await ctx.writer.setStatus(task, "-");
+        await ctx.reindexFile(task.filePath);
+      },
+    },
+  ]);
+
   menu.showAtMouseEvent(e);
 }
 
@@ -378,7 +336,7 @@ function startInlineEdit(textEl: HTMLElement, task: TaskItem, ctx: TaskRowCtx): 
     }
     await ctx.writer.setText(task, v);
     await ctx.reindexFile(task.filePath);
-    ctx.rerender();
+    ctx.rerender?.();
   };
   const cancel = () => {
     if (finished) return;
