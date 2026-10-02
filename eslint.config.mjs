@@ -15,7 +15,7 @@ export default defineConfig([
       // Product/brand names the sentence-case rule would otherwise lowercase.
       "obsidianmd/ui/sentence-case": [
         "warn",
-        { ignoreWords: ["Taskgregator", "Tasks"] },
+        { ignoreWords: ["Reminders", "Tasks"] },
       ],
     },
   },

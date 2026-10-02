@@ -7,19 +7,19 @@ Feature release. Old, still-open work stops slipping through the cracks, and you
 ### Added
 - **Aging smart list.** A new **Aging** list sits under **Soon** in the navigator (hourglass icon), holding every still-open task created a configurable number of days ago or older. It surfaces stale work that's been sitting around regardless of its due date, so nothing quietly rots. Tasks with no created date are excluded (there's no age to measure).
 
-![Aging smart list in the navigator](https://raw.githubusercontent.com/philpalmieri/obsidian-taskgregator/main/assets/2.5.0/aging.png)
+![Aging smart list in the navigator](https://raw.githubusercontent.com/inbrus/obsidian-reminders/main/assets/2.5.0/aging.png)
 
 - **Aging threshold setting.** A new **Aging threshold (days)** setting controls how old a task must be to count as aging (default 14). Set it to 7 for a tighter "older than a week" view, or higher for a looser one.
 
 - **Sort by Created, everywhere.** The main list gains an **Age** sort pill (by created date) alongside the existing ones, and the context sidebar gains its own tri-state sort row with **Priority · Due · Start · Age**, aligned with the filter and scope-tab rows. All cycle ascending (`↑`) → descending (`↓`) → off. Created dates are read from both the `➕` emoji and the `[created:: …]` Dataview inline field, so sorting works whichever format your tasks use.
 
-![Priority / Due / Start / Age sort row in the context sidebar](https://raw.githubusercontent.com/philpalmieri/obsidian-taskgregator/main/assets/2.5.0/aging-sidebar.png)
+![Priority / Due / Start / Age sort row in the context sidebar](https://raw.githubusercontent.com/inbrus/obsidian-reminders/main/assets/2.5.0/aging-sidebar.png)
 
 - **Age chip on every task.** Tasks with a created date now show a small `🌱` age chip (`Today`, `1 Day`, `25 Days`, …) in the meta row across all views. It stays a quiet grey until the task hits the aging threshold, then turns a warning color so stale work stands out at a glance.
 
 ## 2.4.0
 
-Feature release. Overdue work gets its own home, and the right-panel and main-list controls get a lighter, more consistent touch. Overdue list requested in [#4](https://github.com/philpalmieri/obsidian-taskgregator/issues/4).
+Feature release. Overdue work gets its own home, and the right-panel and main-list controls get a lighter, more consistent touch. Overdue list requested in [#4](https://github.com/inbrus/obsidian-reminders/issues/4).
 
 ### Added
 - **Overdue smart list.** A dedicated **Overdue** list now sits at the top of the navigator with an alert-triangle icon and a red count badge, holding every visible open task whose due date is before today. It auto-hides when nothing is overdue, so it only shows up when it's actionable.
@@ -41,11 +41,11 @@ Feature release. Overdue work gets its own home, and the right-panel and main-li
 
 ## 2.3.1
 
-Feature release. Taskgregator now speaks both task metadata dialects, so it fits whichever one you (and the Tasks plugin) already use. Requested in [#1](https://github.com/philpalmieri/obsidian-taskgregator/issues/1).
+Feature release. Obsidian Reminders now speaks both task metadata dialects, so it fits whichever one you (and the Tasks plugin) already use. Requested in [#1](https://github.com/inbrus/obsidian-reminders/issues/1).
 
 ### Added
-- **Dataview inline-field format support.** Taskgregator reads task metadata written as Dataview inline fields (`[due:: 2026-07-29]`, `[priority:: high]`, `[start:: ]`, `[scheduled:: ]`, `[completion:: ]`, `[cancelled:: ]`, `[repeat:: ]`) in addition to the Tasks-plugin emoji signifiers (📅 ⏳ 🛫 🔺 ⏫ 🔼 ✅ ❌ 🔁). Dates, priority, recurrence, and done/cancelled state now populate from either dialect, so every smart list, filter, sort, and grouping works the same regardless of how a task was written.
-- **"Task metadata format" setting** `[Auto, Emoji, Dataview]` (default **Auto**). Controls the format Taskgregator *writes* when you set a date or priority from the right-click menus. **Auto** follows the Tasks plugin's own configured format (loosely coupled by reading its saved setting), falling back to emoji when Tasks isn't installed.
+- **Dataview inline-field format support.** Obsidian Reminders reads task metadata written as Dataview inline fields (`[due:: 2026-07-29]`, `[priority:: high]`, `[start:: ]`, `[scheduled:: ]`, `[completion:: ]`, `[cancelled:: ]`, `[repeat:: ]`) in addition to the Tasks-plugin emoji signifiers (📅 ⏳ 🛫 🔺 ⏫ 🔼 ✅ ❌ 🔁). Dates, priority, recurrence, and done/cancelled state now populate from either dialect, so every smart list, filter, sort, and grouping works the same regardless of how a task was written.
+- **"Task metadata format" setting** `[Auto, Emoji, Dataview]` (default **Auto**). Controls the format Obsidian Reminders *writes* when you set a date or priority from the right-click menus. **Auto** follows the Tasks plugin's own configured format (loosely coupled by reading its saved setting), falling back to emoji when Tasks isn't installed.
 
 ### Changed
 - **Writing preserves each line's existing format.** An emoji task stays emoji and a Dataview task stays Dataview when you edit it; only a task with no metadata yet uses your chosen format. You never get a line with the two dialects mixed together.
@@ -63,15 +63,15 @@ Compliance fix for the community-plugin review. No functional changes.
 
 ## 2.2.0
 
-Feature release. Tags become first-class navigation, and you can jump straight into Taskgregator on startup.
+Feature release. Tags become first-class navigation, and you can jump straight into Obsidian Reminders on startup.
 
 ### Added
 - **All Tags folder in the navigator.** Under Lists there's a collapsible **All Tags** folder that rolls up every task carrying a `#tag`, treated just like a context folder. It shows a total badge, and each tag below it has its own count. Click a tag to open a list scoped to that tag; click the folder header for the combined view. Collapse it like any other node.
-- **Load Taskgregator on startup.** A new setting, **Load Taskgregator on startup** `[Disabled, Today, All, Flagged]`, opens the task list to the chosen view when the vault loads, so you land in your tasks instead of the last note.
+- **Load Obsidian Reminders on startup.** A new setting, **Load Obsidian Reminders on startup** `[Disabled, Today, All, Flagged]`, opens the task list to the chosen view when the vault loads, so you land in your tasks instead of the last note.
 
 ### Changed
-- **Inline `#tags` in task rows render as real tag pills.** A tag written in a task now shows with the same styling as tags everywhere else in Obsidian, and it's clickable. Clicking it opens that tag's list inside Taskgregator (in both the main view and the context sidebar). The small tag chip on the meta row stays.
-- **Markdown links render in task rows.** `[text](url)` in a task now renders as a clickable link instead of raw markdown. Thanks @maxbeizer ([#3](https://github.com/philpalmieri/taskgregator/pull/3)).
+- **Inline `#tags` in task rows render as real tag pills.** A tag written in a task now shows with the same styling as tags everywhere else in Obsidian, and it's clickable. Clicking it opens that tag's list inside Obsidian Reminders (in both the main view and the context sidebar). The small tag chip on the meta row stays.
+- **Markdown links render in task rows.** `[text](url)` in a task now renders as a clickable link instead of raw markdown. Thanks @maxbeizer ([#3](https://github.com/inbrus/obsidian-reminders/pull/3)).
 
 ### Notes
 - No data migration. Tasks remain plain markdown checkboxes; nothing about how tags or links are written changes.
@@ -113,7 +113,7 @@ Major reorganization of the plugin's UI into three surfaces that share one index
 ### Changed
 - Split the old two-pane panel into a left-dock navigator plus a center task list. The list now uses the full main area.
 - Removed the left ribbon icon; the navigator auto-docks in the left sidebar on load.
-- Context sidebar clears when a Taskgregator view is focused (a plugin view isn't a note, so it no longer strands the previous page's tasks), including when the page has no tasks.
+- Context sidebar clears when a Obsidian Reminders view is focused (a plugin view isn't a note, so it no longer strands the previous page's tasks), including when the page has no tasks.
 - README trimmed: core ideas moved up, install/BRAT/roadmap/development sections removed for the Community Plugins listing.
 
 ### Notes

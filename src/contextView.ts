@@ -6,7 +6,7 @@ import { TaskItem } from "./types";
 import { TaskRowCtx, renderTaskRow } from "./ui";
 import { localISODate } from "./dateFormat";
 
-export const VIEW_TYPE_TASKGREGATOR_CONTEXT = "taskgregator-context-view";
+export const VIEW_TYPE_REMINDERS_CONTEXT = "obsidian-reminders-context-view";
 
 const TABS: [ContextScope, string][] = [
   ["all", "All"],
@@ -36,7 +36,7 @@ const SORT_OPTIONS: [SortKey, string][] = [
  * context: tasks on the page (or, for a folder note, the whole folder subtree)
  * plus tasks elsewhere that reference it. Reuses the hub view's task rows.
  */
-export class TaskgregatorContextView extends ItemView {
+export class RemindersContextView extends ItemView {
   deps: ViewDeps;
   file: TFile | null = null;
   private unsubscribers: Array<() => void> = [];
@@ -47,7 +47,7 @@ export class TaskgregatorContextView extends ItemView {
   }
 
   getViewType(): string {
-    return VIEW_TYPE_TASKGREGATOR_CONTEXT;
+    return VIEW_TYPE_REMINDERS_CONTEXT;
   }
   getDisplayText(): string {
     return "Task context";
@@ -57,7 +57,7 @@ export class TaskgregatorContextView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.contentEl.addClass("taskgregator", "tg-context");
+    this.contentEl.addClass("obsidian-reminders", "tg-context");
     this.unsubscribers = [
       this.deps.bus.on("index:updated", () => this.render()),
       this.deps.bus.on("settings:changed", () => this.render()),

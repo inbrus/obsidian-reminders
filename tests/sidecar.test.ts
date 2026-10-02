@@ -28,7 +28,7 @@ describe("sidecarFrontmatter — no personal paths", () => {
   it("contains no hardcoded personal vault paths", () => {
     const body = sidecarFrontmatter(base);
     expect(body).not.toContain("Folders/Pages");
-    expect(body).not.toContain("Taskgregator");
+    expect(body).not.toContain("ObsidianReminders");
     expect(body).not.toContain("[[Task]]");
   });
 

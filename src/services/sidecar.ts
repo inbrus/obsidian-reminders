@@ -5,7 +5,7 @@
 
 import { IVaultAdapter } from "../ports/vault-adapter";
 import { IClock } from "../ports/clock";
-import { TaskgregatorSettings } from "../settings";
+import { ObsidianRemindersSettings } from "../settings";
 import { TaskItem } from "../core/models";
 import {
   normalizePath,
@@ -21,7 +21,7 @@ export class SidecarService {
   constructor(
     private adapter: IVaultAdapter,
     private clock: IClock,
-    private settings: TaskgregatorSettings
+    private settings: ObsidianRemindersSettings
   ) {}
 
   /** Path of an existing sidecar for a block id, or undefined. */

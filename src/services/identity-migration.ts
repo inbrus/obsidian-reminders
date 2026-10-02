@@ -4,7 +4,7 @@
 // whose sidecar already exists. Neither touches markdown formatting otherwise.
 
 import { IVaultAdapter } from "../ports/vault-adapter";
-import { TaskgregatorSettings } from "../settings";
+import { ObsidianRemindersSettings } from "../settings";
 import { parseLine } from "../core/parser";
 import { blockIdOf } from "../core/line-transforms";
 import {
@@ -27,7 +27,7 @@ export interface RepairReport {
 export class IdentityMigration {
   constructor(
     private adapter: IVaultAdapter,
-    private settings: TaskgregatorSettings
+    private settings: ObsidianRemindersSettings
   ) {}
 
   async repairIdentities(dryRun = true): Promise<RepairReport> {

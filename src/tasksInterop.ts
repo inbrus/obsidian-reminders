@@ -1,10 +1,10 @@
 // Loose coupling to the community "Tasks" plugin.
 //
-// Taskgregator has NO hard dependency on Tasks. When Tasks is installed and
+// ObsidianReminders has NO hard dependency on Tasks. When Tasks is installed and
 // enabled, we read its configured global task format (emoji vs dataview) so the
 // context menu writes metadata in whatever style the user already uses. Every
 // access is feature-detected and wrapped in try/catch; if Tasks is absent or
-// its data shape changes, we silently fall back to Taskgregator's own setting.
+// its data shape changes, we silently fall back to ObsidianReminders's own setting.
 
 import { App } from "obsidian";
 import { TaskFormat } from "./dataview";

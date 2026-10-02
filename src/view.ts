@@ -3,7 +3,7 @@ import { TaskItem, TreeNode } from "./types";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./services/writer";
 import { nodeKeyForFile } from "./parser";
-import { TaskgregatorSettings } from "./settings";
+import { ObsidianRemindersSettings } from "./settings";
 import { TaskRowCtx, renderTaskRow, promptDate } from "./ui";
 import { Selection, SortKey, GroupKey } from "./core/models";
 import { UiStateStore } from "./services/selection";
@@ -13,7 +13,7 @@ import { sortTasksBy, groupTasks } from "./core/query";
 export { promptDate };
 export { sortTasksBy };
 
-export const VIEW_TYPE_TASKGREGATOR = "taskgregator-view";
+export const VIEW_TYPE_REMINDERS = "obsidian-reminders-view";
 
 const SORT_OPTIONS: [SortKey, string][] = [
   ["priority", "Priority"],
@@ -39,7 +39,7 @@ const GROUP_OPTIONS: [GroupKey, string][] = [
 export interface ViewDeps {
   store: TaskStore;
   writer: TaskWriter;
-  settings: TaskgregatorSettings;
+  settings: ObsidianRemindersSettings;
   state: UiStateStore;
   bus: EventBus;
   // Full reindex (Reindex command / button). Emits index:updated.
@@ -56,7 +56,7 @@ export interface ViewDeps {
  * The list view: renders the task list for the current selection (held in shared
  * state). Navigation lives in the separate nav view (left dock).
  */
-export class TaskgregatorView extends ItemView {
+export class RemindersView extends ItemView {
   deps: ViewDeps;
   mainEl!: HTMLElement;
   private unsubscribers: Array<() => void> = [];
@@ -71,10 +71,10 @@ export class TaskgregatorView extends ItemView {
   }
 
   getViewType(): string {
-    return VIEW_TYPE_TASKGREGATOR;
+    return VIEW_TYPE_REMINDERS;
   }
   getDisplayText(): string {
-    return "Taskgregator";
+    return "Obsidian Reminders";
   }
   getIcon(): string {
     return "check-check";
@@ -83,7 +83,7 @@ export class TaskgregatorView extends ItemView {
   async onOpen(): Promise<void> {
     const root = this.contentEl;
     root.empty();
-    root.addClass("taskgregator", "tg-list-view");
+    root.addClass("obsidian-reminders", "tg-list-view");
     this.mainEl = root.createDiv({ cls: "tg-main" });
     this.unsubscribers = [
       this.deps.bus.on("index:updated", () => this.render()),

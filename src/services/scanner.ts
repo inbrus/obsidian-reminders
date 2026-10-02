@@ -4,7 +4,7 @@
 
 import { IVaultAdapter, VaultFileMeta } from "../ports/vault-adapter";
 import { TaskItem } from "../core/models";
-import { TaskgregatorSettings } from "../settings";
+import { ObsidianRemindersSettings } from "../settings";
 import { parseLine, isIgnored } from "../core/parser";
 import { SidecarService } from "./sidecar";
 
@@ -12,7 +12,7 @@ export class VaultScanner {
   constructor(
     private adapter: IVaultAdapter,
     private sidecar: SidecarService,
-    private settings: TaskgregatorSettings
+    private settings: ObsidianRemindersSettings
   ) {}
 
   /** Non-ignored markdown files in scope, with stat times (deduped by adapter). */

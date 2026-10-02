@@ -4,14 +4,14 @@ import { ViewDeps } from "./view";
 import { NAV_SECTIONS } from "./parser";
 import { Selection } from "./core/models";
 
-export const VIEW_TYPE_TASKGREGATOR_NAV = "taskgregator-nav-view";
+export const VIEW_TYPE_REMINDERS_NAV = "obsidian-reminders-nav-view";
 
 /**
  * The navigator (left dock): smart lists (Today/Flagged/All + tag lists) and the
  * context tree. Choosing an item sets the shared selection and opens/reveals the
  * center list view.
  */
-export class TaskgregatorNavView extends ItemView {
+export class RemindersNavView extends ItemView {
   deps: ViewDeps;
   private searchInput: HTMLInputElement | null = null;
   private unsubscribers: Array<() => void> = [];
@@ -26,7 +26,7 @@ export class TaskgregatorNavView extends ItemView {
   }
 
   getViewType(): string {
-    return VIEW_TYPE_TASKGREGATOR_NAV;
+    return VIEW_TYPE_REMINDERS_NAV;
   }
   getDisplayText(): string {
     return "Tasks";
@@ -36,7 +36,7 @@ export class TaskgregatorNavView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.contentEl.addClass("taskgregator", "tg-nav-view");
+    this.contentEl.addClass("obsidian-reminders", "tg-nav-view");
     this.unsubscribers = [
       this.deps.bus.on("index:updated", () => this.render()),
       this.deps.bus.on("selection:changed", () => this.render()),

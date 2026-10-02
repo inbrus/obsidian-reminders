@@ -1,5 +1,5 @@
 import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext, normalizePath, Notice, setIcon } from "obsidian";
-import { TaskgregatorSettings, DEFAULT_SETTINGS, TaskgregatorSettingTab } from "./settings";
+import { ObsidianRemindersSettings, DEFAULT_SETTINGS, ObsidianRemindersSettingTab } from "./settings";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./services/writer";
 import {
@@ -16,12 +16,12 @@ import { VaultScanner } from "./services/scanner";
 import { ObsidianVaultAdapter } from "./infra/obsidian-vault-adapter";
 import { ObsidianClock } from "./infra/obsidian-clock";
 import { getTasksPluginFormat } from "./tasksInterop";
-import { TaskgregatorView, VIEW_TYPE_TASKGREGATOR, ViewDeps } from "./view";
-import { TaskgregatorNavView, VIEW_TYPE_TASKGREGATOR_NAV } from "./navView";
+import { RemindersView, VIEW_TYPE_REMINDERS, ViewDeps } from "./view";
+import { RemindersNavView, VIEW_TYPE_REMINDERS_NAV } from "./navView";
 import { UiStateStore } from "./services/selection";
 import { EventBus } from "./services/event-bus";
 import { promptDate } from "./ui";
-import { TaskgregatorContextView, VIEW_TYPE_TASKGREGATOR_CONTEXT } from "./contextView";
+import { RemindersContextView, VIEW_TYPE_REMINDERS_CONTEXT } from "./contextView";
 import { noteIconLivePreview } from "./livePreview";
 import { maybeShowChangelog, openChangelog } from "./changelog";
 import { buildMenu, priorityActions } from "./editor/menu";
@@ -29,8 +29,8 @@ import { ObsidianStorage } from "./infra/obsidian-storage";
 import { IndexPersistence } from "./services/index-persistence";
 import { IdentityMigration, RepairReport } from "./services/identity-migration";
 
-export default class Taskgregator extends Plugin {
-  settings!: TaskgregatorSettings;
+export default class ObsidianReminders extends Plugin {
+  settings!: ObsidianRemindersSettings;
   store!: TaskStore;
   writer!: TaskWriter;
   state!: UiStateStore;
@@ -80,18 +80,18 @@ export default class Taskgregator extends Plugin {
     };
 
     this.registerView(
-      VIEW_TYPE_TASKGREGATOR,
-      (leaf: WorkspaceLeaf) => new TaskgregatorView(leaf, deps)
+      VIEW_TYPE_REMINDERS,
+      (leaf: WorkspaceLeaf) => new RemindersView(leaf, deps)
     );
 
     this.registerView(
-      VIEW_TYPE_TASKGREGATOR_NAV,
-      (leaf: WorkspaceLeaf) => new TaskgregatorNavView(leaf, deps)
+      VIEW_TYPE_REMINDERS_NAV,
+      (leaf: WorkspaceLeaf) => new RemindersNavView(leaf, deps)
     );
 
     this.registerView(
-      VIEW_TYPE_TASKGREGATOR_CONTEXT,
-      (leaf: WorkspaceLeaf) => new TaskgregatorContextView(leaf, deps)
+      VIEW_TYPE_REMINDERS_CONTEXT,
+      (leaf: WorkspaceLeaf) => new RemindersContextView(leaf, deps)
     );
 
     this.addCommand({
@@ -138,7 +138,7 @@ export default class Taskgregator extends Plugin {
       callback: () => openChangelog(this),
     });
 
-    this.addSettingTab(new TaskgregatorSettingTab(this.app, this));
+    this.addSettingTab(new ObsidianRemindersSettingTab(this.app, this));
 
     // In reading view, replace the raw block-id on a task that has a detail note
     // with a small clickable note icon (matching the plugin views' 📝 chip).
@@ -227,9 +227,9 @@ export default class Taskgregator extends Plugin {
   /** Ensure the nav view exists in the left sidebar (without stealing focus). */
   private async ensureNav(): Promise<void> {
     const { workspace } = this.app;
-    if (workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR_NAV).length > 0) return;
+    if (workspace.getLeavesOfType(VIEW_TYPE_REMINDERS_NAV).length > 0) return;
     const nav = workspace.getLeftLeaf(false);
-    if (nav) await nav.setViewState({ type: VIEW_TYPE_TASKGREGATOR_NAV });
+    if (nav) await nav.setViewState({ type: VIEW_TYPE_REMINDERS_NAV });
   }
 
   onunload(): void {
@@ -311,7 +311,7 @@ export default class Taskgregator extends Plugin {
 
     // Nav lives in the left dock.
     await this.ensureNav();
-    const nav = workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR_NAV)[0] ?? null;
+    const nav = workspace.getLeavesOfType(VIEW_TYPE_REMINDERS_NAV)[0] ?? null;
 
     // List lives in the center.
     await this.openList();
@@ -323,10 +323,10 @@ export default class Taskgregator extends Plugin {
   async openList(): Promise<void> {
     const { workspace } = this.app;
     let leaf: WorkspaceLeaf | null =
-      workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR)[0] ?? null;
+      workspace.getLeavesOfType(VIEW_TYPE_REMINDERS)[0] ?? null;
     if (!leaf) {
       leaf = workspace.getLeaf(true);
-      await leaf.setViewState({ type: VIEW_TYPE_TASKGREGATOR, active: true });
+      await leaf.setViewState({ type: VIEW_TYPE_REMINDERS, active: true });
     }
     await workspace.revealLeaf(leaf);
   }
@@ -334,11 +334,11 @@ export default class Taskgregator extends Plugin {
   async activateContextView(): Promise<void> {
     const { workspace } = this.app;
     let leaf: WorkspaceLeaf | null =
-      workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR_CONTEXT)[0] ?? null;
+      workspace.getLeavesOfType(VIEW_TYPE_REMINDERS_CONTEXT)[0] ?? null;
     if (!leaf) {
       leaf = workspace.getRightLeaf(false);
       if (!leaf) return;
-      await leaf.setViewState({ type: VIEW_TYPE_TASKGREGATOR_CONTEXT, active: true });
+      await leaf.setViewState({ type: VIEW_TYPE_REMINDERS_CONTEXT, active: true });
     }
     this.updateContextViews();
     await workspace.revealLeaf(leaf);
@@ -347,12 +347,12 @@ export default class Taskgregator extends Plugin {
   private onActiveLeafChange(leaf: WorkspaceLeaf | null): void {
     const type = leaf?.view?.getViewType();
     // Focusing the plugin's own nav/list view: blank the context sidebar.
-    if (type === VIEW_TYPE_TASKGREGATOR || type === VIEW_TYPE_TASKGREGATOR_NAV) {
+    if (type === VIEW_TYPE_REMINDERS || type === VIEW_TYPE_REMINDERS_NAV) {
       this.setContextFile(null);
       return;
     }
     // Focusing the context view itself: leave it on the current file.
-    if (type === VIEW_TYPE_TASKGREGATOR_CONTEXT) return;
+    if (type === VIEW_TYPE_REMINDERS_CONTEXT) return;
     this.updateContextViews();
   }
 
@@ -436,12 +436,12 @@ export default class Taskgregator extends Plugin {
     buildMenu(menu, [
       { separator: true },
       {
-        title: "Taskgregator: Priority",
+        title: "Reminders: Priority",
         icon: "flag",
         submenu: priorityActions(currentPrio(), (lvl) => void setPrio(lvl)),
       },
       {
-        title: "Taskgregator: Set due date…",
+        title: "Reminders: Set due date…",
         icon: "calendar",
         onClick: async () => {
           const d = await promptDate(this.app, "Due date");
@@ -452,12 +452,12 @@ export default class Taskgregator extends Plugin {
         },
       },
       {
-        title: "Taskgregator: Toggle #today",
+        title: "Reminders: Toggle #today",
         icon: "star",
         onClick: () => set(toggleTagInLine(get(), "today")),
       },
       {
-        title: "Taskgregator: Open detail note",
+        title: "Reminders: Open detail note",
         icon: "sticky-note",
         onClick: async () => {
           const parsed = parseLine(get(), filePath, lineNo, this.settings);
@@ -469,13 +469,13 @@ export default class Taskgregator extends Plugin {
         },
       },
       {
-        title: "Taskgregator: Reveal in task list",
+        title: "Reminders: Reveal in task list",
         icon: "check-check",
         onClick: async () => {
           await this.activateView();
-          for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKGREGATOR)) {
+          for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_REMINDERS)) {
             const v = leaf.view;
-            if (v instanceof TaskgregatorView) v.revealTask(filePath);
+            if (v instanceof RemindersView) v.revealTask(filePath);
           }
           this.bus.emit("index:updated", { full: true });
         },
@@ -484,7 +484,7 @@ export default class Taskgregator extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = (await this.loadData()) as Partial<TaskgregatorSettings> | null;
+    const data = (await this.loadData()) as Partial<ObsidianRemindersSettings> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
     if (typeof this.settings.navShowCounts !== "object" || this.settings.navShowCounts === null)
       this.settings.navShowCounts = { ...DEFAULT_SETTINGS.navShowCounts };

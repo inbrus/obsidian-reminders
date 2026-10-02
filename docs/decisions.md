@@ -189,3 +189,19 @@ inline-иконка заметки (`main.ts`, `livePreview.ts`). Приорит
 
 **Ручной прогон (Johan):** desktop + mobile — собрать `main.js`, проверить
 чипы/иконки и settings-вкладку.
+
+## Фаза 6 — ренейминг бренда (Taskgregator → Obsidian Reminders)
+
+- Классы/типы: `ObsidianReminders`, `ObsidianRemindersSettings`,
+  `ObsidianRemindersSettingTab`, `RemindersView`/`RemindersNavView`/`RemindersContextView`.
+- View types: `VIEW_TYPE_REMINDERS[_NAV|_CONTEXT]`; строки
+  `obsidian-reminders[-nav|-context]-view`.
+- CSS root-класс `.taskgregator` → `.obsidian-reminders` (`styles.css` + `addClass`).
+- UI-строки: «Obsidian Reminders» в настройках/changelog/view-name, «Reminders: …» в меню.
+- `sidecarFolder` default → `Obsidian Reminders/tasksData`.
+- `README.md`/`package-lock.json`: `Obsidian Reminders` / `obsidian-reminders`.
+
+**Гейт:** 73 теста, lint 0/0, build зелёный; `grep -ri taskgregator src tests styles.css` = 0.
+
+**Отложено (решение Johan):** `CHANGELOG.md` — история форка
+`philpalmieri/obsidian-taskgregator`; переписывать или оставить как историю происхождения.

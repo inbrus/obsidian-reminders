@@ -1,7 +1,7 @@
 // Phase 2 ports tests. The whole stateful stack — SidecarService, TaskWriter,
 // TaskStore, VaultScanner — is exercised against a fake IVaultAdapter/IClock/
 // ILinkResolver, proving the services depend on ports, not on Obsidian's vault.
-// (settings.ts is pulled in only for the TaskgregatorSettings type; it is stubbed
+// (settings.ts is pulled in only for the ObsidianRemindersSettings type; it is stubbed
 // via the obsidian alias in vitest.config.ts, same as the existing parser tests.)
 import { describe, it, expect, beforeEach } from "vitest";
 import { IVaultAdapter, VaultFileMeta } from "../src/ports/vault-adapter";
@@ -9,7 +9,7 @@ import { IClock } from "../src/ports/clock";
 import { ILinkResolver } from "../src/ports/link-resolver";
 import { localISODate } from "../src/core/date";
 import { parseLine } from "../src/core/parser";
-import { TaskgregatorSettings, DEFAULT_SETTINGS } from "../src/settings";
+import { ObsidianRemindersSettings, DEFAULT_SETTINGS } from "../src/settings";
 import { SidecarService } from "../src/services/sidecar";
 import { TaskWriter } from "../src/services/writer";
 import { VaultScanner } from "../src/services/scanner";
@@ -95,7 +95,7 @@ class FakeStorage implements IStorage {
   }
 }
 
-const SETTINGS: TaskgregatorSettings = {
+const SETTINGS: ObsidianRemindersSettings = {
   ...DEFAULT_SETTINGS,
   sidecarFolder: "Notes/Tasks",
 };

@@ -5,12 +5,12 @@ import {
   SettingDefinitionItem,
   SettingPage,
 } from "obsidian";
-import type Taskgregator from "./main";
+import type ObsidianReminders from "./main";
 import { NAV_SECTIONS } from "./parser";
 
 export type StartupView = "disabled" | "today" | "all" | "flagged";
 
-// How Taskgregator writes task metadata. "auto" defers to the Tasks plugin's
+// How ObsidianReminders writes task metadata. "auto" defers to the Tasks plugin's
 // configured format (falling back to emoji when Tasks isn't installed/readable).
 export type TaskFormatSetting = "auto" | "emoji" | "dataview";
 
@@ -20,7 +20,7 @@ export interface SmartList {
   icon?: string;
 }
 
-export interface TaskgregatorSettings {
+export interface ObsidianRemindersSettings {
   // Folders whose files become top-level context buckets.
   bucketRoots: string[];
   // Glob-ish path prefixes to ignore entirely.
@@ -39,7 +39,7 @@ export interface TaskgregatorSettings {
   useEmojiMetadata: boolean;
   // Auto-open the context sidebar (follows the active file) on startup.
   enableContextSidebar: boolean;
-  // Which list the main Taskgregator panel opens to on startup ("disabled" = don't auto-open).
+  // Which list the main ObsidianReminders panel opens to on startup ("disabled" = don't auto-open).
   startupView: StartupView;
   // "Soon" smart-list window in days (tasks due within the next N days).
   soonDays: number;
@@ -62,7 +62,7 @@ export interface TaskgregatorSettings {
   navShowCounts: Record<string, boolean>;
 }
 
-export const DEFAULT_SETTINGS: TaskgregatorSettings = {
+export const DEFAULT_SETTINGS: ObsidianRemindersSettings = {
   bucketRoots: ["Projects", "People", "Areas"],
   ignorePaths: ["Archive/", "Templates/"],
   inboxRoots: ["Dailies"],
@@ -73,7 +73,7 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
     { name: "Snippet Ideas", tag: "snippetIdea", icon: "lightbulb" },
     { name: "Someday", tag: "someday", icon: "clock" },
   ],
-  sidecarFolder: "Taskgregator/tasksData",
+  sidecarFolder: "Obsidian Reminders/tasksData",
   dateFormat: "YYYY-MM-DD",
   useEmojiMetadata: true,
   enableContextSidebar: true,
@@ -99,9 +99,9 @@ export const DEFAULT_SETTINGS: TaskgregatorSettings = {
 
 /** Imperative sub-page: reorder, show/hide, and toggle counts for nav sections. */
 class NavSectionsPage extends SettingPage {
-  plugin: Taskgregator;
+  plugin: ObsidianReminders;
 
-  constructor(plugin: Taskgregator) {
+  constructor(plugin: ObsidianReminders) {
     super();
     this.plugin = plugin;
     this.title = "Navigation sections";
@@ -171,10 +171,10 @@ class NavSectionsPage extends SettingPage {
   }
 }
 
-export class TaskgregatorSettingTab extends PluginSettingTab {
-  plugin: Taskgregator;
+export class ObsidianRemindersSettingTab extends PluginSettingTab {
+  plugin: ObsidianReminders;
 
-  constructor(app: App, plugin: Taskgregator) {
+  constructor(app: App, plugin: ObsidianReminders) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -244,8 +244,8 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         control: { type: "toggle", key: "showChangelogOnUpdate" },
       },
       {
-        name: "Load Taskgregator on startup",
-        desc: "Open the main Taskgregator panel to a list automatically when Obsidian starts.",
+        name: "Load Obsidian Reminders on startup",
+        desc: "Open the main Obsidian Reminders panel to a list automatically when Obsidian starts.",
         control: {
           type: "dropdown",
           key: "startupView",

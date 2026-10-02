@@ -1,5 +1,5 @@
 // UiStateStore: shared UI state for the nav, list, and context views. Replaces
-// TaskgregatorState. Selection and search emit bus events on write (so other
+// ObsidianRemindersState. Selection and search emit bus events on write (so other
 // views react); the rest (sort/group/collapse/context-tab) are per-view visual
 // state that the owning view re-renders itself, so they need no event.
 

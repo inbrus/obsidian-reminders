@@ -7,7 +7,7 @@ import { buildMenu, priorityActions } from "./editor/menu";
 import { iconForEmoji } from "./core/icon-map";
 
 /**
- * Shared task-row rendering used by both the full Taskgregator hub view and the
+ * Shared task-row rendering used by both the full ObsidianReminders hub view and the
  * context sidebar. Kept UI-framework-free (just DOM) so either host can call it.
  */
 export interface TaskRowCtx {

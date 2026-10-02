@@ -6,7 +6,7 @@
 // and core/context.ts.
 
 import { TaskItem, TaskStatus, TreeNode } from "./types";
-import { TaskgregatorSettings } from "./settings";
+import { ObsidianRemindersSettings } from "./settings";
 import { VaultScanner } from "./services/scanner";
 import { ILinkResolver } from "./ports/link-resolver";
 import { IClock } from "./ports/clock";
@@ -40,7 +40,7 @@ export class TaskStore {
     private scanner: VaultScanner,
     private linkResolver: ILinkResolver,
     private clock: IClock,
-    readonly settings: TaskgregatorSettings
+    readonly settings: ObsidianRemindersSettings
   ) {}
 
   // --- index maintenance ---

@@ -4,7 +4,7 @@
 
 import { IVaultAdapter } from "../ports/vault-adapter";
 import { TaskItem } from "../core/models";
-import { TaskgregatorSettings } from "../settings";
+import { ObsidianRemindersSettings } from "../settings";
 import {
   applyStatusToLine,
   applyPriorityToLine,
@@ -27,7 +27,7 @@ export class TaskWriter {
   constructor(
     private adapter: IVaultAdapter,
     private sidecar: SidecarService,
-    private settings: TaskgregatorSettings,
+    private settings: ObsidianRemindersSettings,
     private getTasksFormat: TasksFormatProvider
   ) {}
 

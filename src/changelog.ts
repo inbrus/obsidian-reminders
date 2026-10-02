@@ -1,5 +1,5 @@
 import { App, Component, MarkdownRenderer, Modal, normalizePath } from "obsidian";
-import type Taskgregator from "./main";
+import type ObsidianReminders from "./main";
 
 // Changelog is read only from the local plugin folder. Community installs ship
 // only main.js/manifest.json/styles.css, so when CHANGELOG.md is absent we link
@@ -14,11 +14,11 @@ const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main`;
  * absolute GitHub raw URLs in the changelog, so they load either way.
  */
 export class ChangelogModal extends Modal {
-  private plugin: Taskgregator;
+  private plugin: ObsidianReminders;
   private version: string;
   private body: Component = new Component();
 
-  constructor(app: App, plugin: Taskgregator, version: string) {
+  constructor(app: App, plugin: ObsidianReminders, version: string) {
     super(app);
     this.plugin = plugin;
     this.version = version;
@@ -28,7 +28,7 @@ export class ChangelogModal extends Modal {
     this.modalEl.addClass("tg-changelog-modal");
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: `What's new in Taskgregator ${this.version}` });
+    contentEl.createEl("h2", { text: `What's new in Obsidian Reminders ${this.version}` });
 
     const md = await this.loadSection();
     const target = contentEl.createDiv({ cls: "tg-changelog-body markdown-rendered" });
@@ -120,7 +120,7 @@ export function extractVersionSection(changelog: string, version: string): strin
  * Always records the version even when the modal is suppressed, so toggling the
  * setting on later doesn't retroactively pop an old changelog.
  */
-export async function maybeShowChangelog(plugin: Taskgregator): Promise<void> {
+export async function maybeShowChangelog(plugin: ObsidianReminders): Promise<void> {
   const current = plugin.manifest.version;
   const seen = plugin.settings.lastSeenVersion;
   if (seen === current) return;
@@ -133,6 +133,6 @@ export async function maybeShowChangelog(plugin: Taskgregator): Promise<void> {
 }
 
 /** Command-triggered manual open (ignores the seen-version gate). */
-export function openChangelog(plugin: Taskgregator): void {
+export function openChangelog(plugin: ObsidianReminders): void {
   new ChangelogModal(plugin.app, plugin, plugin.manifest.version).open();
 }

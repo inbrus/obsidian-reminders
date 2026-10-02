@@ -1,20 +1,20 @@
-# Taskgregator
+# Obsidian Reminders
 
 **Task management that works the way you already work.**
 
-Taskgregator isn't another task system to adopt. It reads the plain markdown checkboxes you already write, wherever you already write them, and gives you fast, focused views of your work without asking you to change a thing.
+Obsidian Reminders isn't another task system to adopt. It reads the plain markdown checkboxes you already write, wherever you already write them, and gives you fast, focused views of your work without asking you to change a thing.
 
-No separate database. No special task files. No syntax to learn. No rules to follow. Your notes stay exactly as they are, and your tasks stay on the lines where you typed them. Taskgregator just aggregates, organizes, and surfaces them so you can see everything from different angles and act on it in place.
+No separate database. No special task files. No syntax to learn. No rules to follow. Your notes stay exactly as they are, and your tasks stay on the lines where you typed them. Obsidian Reminders just aggregates, organizes, and surfaces them so you can see everything from different angles and act on it in place.
 
 Think Things, Todoist, or TickTick, but pointed at the notes you already have instead of a silo you have to feed.
 
-![Taskgregator navigator and task list](assets/tasks-by-project.png)
+![Obsidian Reminders navigator and task list](assets/tasks-by-project.png)
 
 ## Why it's different
 
 Most task plugins make you pick a side: adopt a whole new system, or scatter each task into its own document with its own metadata block. Both make your notes serve the tool.
 
-Taskgregator flips that. The tool serves your notes.
+Obsidian Reminders flips that. The tool serves your notes.
 
 - **Zero adoption cost.** A task is just a markdown checkbox. If you can write `- [ ] thing`, you're already using it.
 - **No enforced structure.** There's nothing you *have* to do. No required fields, no mandatory tags, no folder layout you must follow. Use as much or as little as you want.
@@ -62,7 +62,7 @@ While you're writing a note, the right sidebar shows that note's tasks, so you n
 
 ### Right-click anywhere
 
-Because Taskgregator understands your task lines, you get a context menu on any task line in the normal editor, not just inside the plugin panel. Set priority, add a due date, toggle `#today`, open a detail note, or reveal the task in the task list.
+Because Obsidian Reminders understands your task lines, you get a context menu on any task line in the normal editor, not just inside the plugin panel. Set priority, add a due date, toggle `#today`, open a detail note, or reveal the task in the task list.
 
 ![Right-click menu on a task line](assets/wireframe-contextmenu.png)
 
@@ -85,7 +85,7 @@ Because Taskgregator understands your task lines, you get a context menu on any 
 
 ## Task format
 
-Taskgregator reads standard markdown checkboxes and Tasks-plugin emoji metadata. Nothing here is required; add only what's useful to you:
+Obsidian Reminders reads standard markdown checkboxes and Tasks-plugin emoji metadata. Nothing here is required; add only what's useful to you:
 
 ```markdown
 - [ ] Open task
@@ -114,7 +114,7 @@ Recognized signifiers:
 
 ### Dataview inline fields
 
-If you (or the Tasks plugin) write metadata as Dataview inline fields instead of emoji, Taskgregator reads those too, so both styles work interchangeably in every list, filter, sort, and grouping:
+If you (or the Tasks plugin) write metadata as Dataview inline fields instead of emoji, Obsidian Reminders reads those too, so both styles work interchangeably in every list, filter, sort, and grouping:
 
 ```markdown
 - [ ] With dataview metadata [due:: 2026-07-01] [start:: 2026-06-25] [priority:: medium] #followup
@@ -123,11 +123,11 @@ If you (or the Tasks plugin) write metadata as Dataview inline fields instead of
 
 Recognized fields: `[due:: ]`, `[start:: ]`, `[scheduled:: ]`, `[created:: ]`, `[completion:: ]` (done date), `[cancelled:: ]`, `[repeat:: ]`, and `[priority:: highest|high|medium|low|lowest]`.
 
-When Taskgregator *writes* a date or priority, the **Task metadata format** setting decides the style: **Auto** (default) follows the Tasks plugin's own configured format, falling back to emoji when Tasks isn't installed; you can also force **Emoji** or **Dataview**. Either way, a line that already carries metadata keeps its existing format, so the two styles never get mixed on one line.
+When Obsidian Reminders *writes* a date or priority, the **Task metadata format** setting decides the style: **Auto** (default) follows the Tasks plugin's own configured format, falling back to emoji when Tasks isn't installed; you can also force **Emoji** or **Dataview**. Either way, a line that already carries metadata keeps its existing format, so the two styles never get mixed on one line.
 
 ## Usage
 
-- The **navigator** opens in the left sidebar (its ✓✓ tab sits next to Files and Search). You can also run **Taskgregator: Open panel** from the command palette.
+- The **navigator** opens in the left sidebar (its ✓✓ tab sits next to Files and Search). You can also run **Obsidian Reminders: Open panel** from the command palette.
 - **Search** from the box at the top of the navigator to filter the current list; it keeps filtering as you switch lists. Clear with the **×** or **Esc**.
 - Click a smart list or a tree node to load its tasks in the main list.
 - On a task card: click the checkbox to complete, the flag to cycle priority, the `⋯` menu (or right-click) for dates/detail-note/cancel, a chip to jump to its source, or the 📝 chip to open its detail note.
@@ -141,9 +141,9 @@ When Taskgregator *writes* a date or priority, the **Task metadata format** sett
 - **Ignore paths**: path prefixes to exclude from indexing.
 - **Priority tags**: fallback priority tags (default `p1, p2, p3`).
 - **Smart lists**: cross-cutting tag lists (`Name:tag` pairs).
-- **Detail-note folder**: where sidecars are stored (default `Taskgregator/tasksData`).
+- **Detail-note folder**: where sidecars are stored (default `Obsidian Reminders/tasksData`).
 - **Soon window (days)**: how many days ahead the **Soon** smart list looks (default 7).
-- **Task metadata format**: how Taskgregator writes dates and priority: **Auto** (follow the Tasks plugin, emoji if it isn't installed), **Emoji**, or **Dataview**. Reading always understands both.
+- **Task metadata format**: how Obsidian Reminders writes dates and priority: **Auto** (follow the Tasks plugin, emoji if it isn't installed), **Emoji**, or **Dataview**. Reading always understands both.
 - **Show completed tasks**: include done/cancelled tasks in the index.
 - **Context sidebar**: enable the right-sidebar panel that follows the active note.
 
@@ -151,7 +151,7 @@ When Taskgregator *writes* a date or priority, the **Task metadata format** sett
 
 ## What data it touches
 
-Taskgregator only reads markdown files inside the folders you configure as bucket roots and inbox roots (by default `Projects`, `People`, `Areas`, and `Dailies`). It walks those folders directly rather than enumerating your whole vault, so files outside your configured roots are never opened. It does not make network requests, and it only writes back to the specific task lines and optional per-task detail notes you act on.
+Obsidian Reminders only reads markdown files inside the folders you configure as bucket roots and inbox roots (by default `Projects`, `People`, `Areas`, and `Dailies`). It walks those folders directly rather than enumerating your whole vault, so files outside your configured roots are never opened. It does not make network requests, and it only writes back to the specific task lines and optional per-task detail notes you act on.
 
 ## License
 
