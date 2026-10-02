@@ -1,20 +1,13 @@
+// Context-sidebar computation. Depends on Obsidian (App + link cache) for link
+// resolution, so the pure types live in core/models.ts and the pure tree
+// builder in core/context.ts; this module keeps only the Obsidian-bound logic.
+
 import { App, TFile } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskStore } from "./store";
+import { ContextResult } from "./core/models";
 
-export type ContextScope = "all" | "page" | "section" | "reference";
-
-// Due-date filter applied on top of the active scope in the context sidebar.
-export type DueFilter = "all" | "overdue" | "today" | "soon";
-
-export interface ContextResult {
-  title: string;
-  subtitle: string;
-  isFolderNote: boolean;
-  // Task lists per scope. "all" is the deduped union (page → section → refs).
-  scopes: Record<ContextScope, TaskItem[]>;
-  total: number;
-}
+export type { ContextScope, DueFilter, ContextResult } from "./core/models";
 
 /**
  * A file is treated as a "folder note" when its basename matches its parent

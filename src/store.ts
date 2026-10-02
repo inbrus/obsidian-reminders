@@ -1,7 +1,13 @@
+// TaskStore: in-memory index of tasks. Stateful; depends on Obsidian (App) for
+// scanning and link resolution. Pure filtering/sorting/grouping and context-tree
+// building live in core/query.ts and core/context.ts.
+
 import { App } from "obsidian";
 import { TaskItem, TreeNode } from "./types";
 import { TaskgregatorSettings } from "./settings";
-import { scanVault, nodeKeyForFile } from "./parser";
+import { scanVault } from "./parser";
+import { filterByQuery as filterTasks } from "./core/query";
+import { buildContextTree } from "./core/context";
 
 export class TaskStore {
   app: App;
@@ -42,123 +48,25 @@ export class TaskStore {
     return this.tasks.get(id);
   }
 
-  /**
-   * Filter a task set by a free-text query. Each whitespace-separated term must
-   * appear (as a case-insensitive substring) in the task's text, tags, links, or
-   * source file. Empty query returns the list unchanged.
-   */
+  /** Delegate free-text filtering to the pure query engine. */
   filterByQuery(tasks: TaskItem[], query: string): TaskItem[] {
-    const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    const terms = q.split(/\s+/);
-    return tasks.filter((t) => {
-      const hay = [t.text, t.rawText, t.tags.join(" "), t.links.join(" "), t.bucketFile]
-        .join(" ")
-        .toLowerCase();
-      return terms.every((term) => hay.includes(term));
-    });
+    return filterTasks(tasks, query);
   }
 
   /**
-   * Build the context tree: bucketRoot -> nested folders -> file -> tasks, with
-   * rolled-up (deduped) open counts at every level. Inbox roots and the catch-all
-   * "Other" root collapse to a single flat node.
-   * Cross-index: a task that links to a file under a bucket root also appears under
-   * that file's node, even when authored elsewhere.
+   * Build the context tree, resolving wikilinks through Obsidian's cache. The
+   * tree-building itself is pure (core/context.ts); only link resolution is
+   * Obsidian-specific and injected here.
    */
   buildContextTree(): TreeNode[] {
-    const visible = this.visible();
-    const rootsOrder = this.settings.bucketRoots.concat(
-      this.settings.inboxRoots,
-      ["Other"]
+    return buildContextTree(
+      this.visible(),
+      { bucketRoots: this.settings.bucketRoots, inboxRoots: this.settings.inboxRoots },
+      (link, fromPath) => {
+        const dest = this.app.metadataCache.getFirstLinkpathDest(link, fromPath);
+        return dest ? dest.path : undefined;
+      }
     );
-    const nodeMap = new Map<string, TreeNode>();
-    const directIds = new Map<string, Set<string>>();
-
-    const ensureNode = (
-      key: string,
-      label: string,
-      kind: TreeNode["kind"]
-    ): TreeNode => {
-      let n = nodeMap.get(key);
-      if (!n) {
-        n = { key, label, kind, children: [], taskIds: [], count: 0 };
-        nodeMap.set(key, n);
-        directIds.set(key, new Set());
-      }
-      return n;
-    };
-
-    // Resolve a file path to the node a task should attach to, creating the
-    // root -> folder... -> file chain as needed.
-    const fileNodeFor = (filePath: string): TreeNode => {
-      const { rootName, flat } = nodeKeyForFile(filePath, this.settings);
-      const root = ensureNode(rootName, rootName, "root");
-      if (flat) return root;
-      const parts = filePath.split("/");
-      let parent = root;
-      let parentKey = rootName;
-      // Intermediate folders (between root and file).
-      for (let i = 1; i < parts.length - 1; i++) {
-        const folderKey = `${parentKey}/${parts[i]}`;
-        let node = nodeMap.get(folderKey);
-        if (!node) {
-          node = ensureNode(folderKey, parts[i], "folder");
-          parent.children.push(node);
-        }
-        parent = node;
-        parentKey = folderKey;
-      }
-      const base = parts[parts.length - 1].replace(/\.md$/i, "");
-      const fileKey = `${parentKey}/${base}`;
-      let fileNode = nodeMap.get(fileKey);
-      if (!fileNode) {
-        fileNode = ensureNode(fileKey, base, "file");
-        parent.children.push(fileNode);
-      }
-      return fileNode;
-    };
-
-    // Pass 1: authored location.
-    for (const t of visible) {
-      const node = fileNodeFor(t.filePath);
-      directIds.get(node.key)!.add(t.id);
-    }
-
-    // Pass 2: cross-index by wikilink into the linked file's node.
-    for (const t of visible) {
-      for (const link of t.links) {
-        const dest = this.app.metadataCache.getFirstLinkpathDest(link, t.filePath);
-        if (!dest) continue;
-        const parts = dest.path.split("/");
-        if (parts.length < 2 || !this.settings.bucketRoots.includes(parts[0])) continue;
-        const node = fileNodeFor(dest.path);
-        directIds.get(node.key)!.add(t.id);
-      }
-    }
-
-    // Roll up counts (deduped) and sort, bottom-up.
-    const rollup = (node: TreeNode): Set<string> => {
-      const set = new Set<string>(directIds.get(node.key) || []);
-      node.taskIds = Array.from(directIds.get(node.key) || []);
-      for (const c of node.children) {
-        for (const id of rollup(c)) set.add(id);
-      }
-      node.children.sort(
-        (a, b) => b.count - a.count || a.label.localeCompare(b.label)
-      );
-      node.count = set.size;
-      return set;
-    };
-
-    const roots: TreeNode[] = [];
-    for (const name of rootsOrder) {
-      const r = nodeMap.get(name);
-      if (!r) continue;
-      rollup(r);
-      roots.push(r);
-    }
-    return roots;
   }
 
   /** Tasks that reference a given file/person by wikilink (cross-index). */

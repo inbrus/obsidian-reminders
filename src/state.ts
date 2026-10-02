@@ -1,39 +1,13 @@
-// Shared UI state for the Taskgregator nav (left dock) and list (center) views.
-// Both views read/write the same instance so a selection made in the nav is
-// reflected by the list, and sort/group/collapse survive re-renders.
+// Shared UI state for the obsidian-reminders nav (left dock) and list (center)
+// views. Both views read/write the same instance so a selection made in the nav
+// is reflected by the list, and sort/group/collapse survive re-renders.
+//
+// The pure SortKey/GroupKey/Selection types live in core/models.ts and are
+// re-exported here for backward-compatible imports.
 
-import { ContextScope, DueFilter } from "./context";
+import type { ContextScope, DueFilter, Selection, SortKey, GroupKey } from "./core/models";
 
-export type SortKey =
-  | "priority"
-  | "due"
-  | "start"
-  | "created"
-  | "reference"
-  | "title"
-  | "mtime"
-  | "ctime";
-export type GroupKey =
-  | "none"
-  | "priority"
-  | "due"
-  | "reference"
-  | "mtime"
-  | "ctime"
-  | "type";
-export type Selection =
-  | { type: "overdue" }
-  | { type: "today" }
-  | { type: "tomorrow" }
-  | { type: "soon" }
-  | { type: "inbox" }
-  | { type: "all" }
-  | { type: "flagged" }
-  | { type: "inprogress" }
-  | { type: "completed" }
-  | { type: "tags" }
-  | { type: "smart"; tag: string; label: string }
-  | { type: "node"; key: string; label: string };
+export type { SortKey, GroupKey, Selection } from "./core/models";
 
 export class TaskgregatorState {
   selection: Selection = { type: "today" };
