@@ -1,11 +1,10 @@
-// TaskWriter: the Obsidian-side writer. Applies pure line transforms (from
-// core/line-transforms.ts) through vault.process, and handles sidecar I/O.
-// The pure transforms are re-exported here so existing call sites
-// (`import ... from "./writer"`) keep working unchanged.
+// TaskWriter: applies pure line transforms (core/line-transforms.ts) through
+// the vault adapter, and delegates sidecar I/O to SidecarService. This is the
+// "thin writer" — it holds no formatting logic, only the vault.process plumbing.
 
-import { App, TFile, normalizePath } from "obsidian";
-import { TaskItem } from "./types";
-import { TaskgregatorSettings } from "./settings";
+import { IVaultAdapter } from "../ports/vault-adapter";
+import { TaskItem } from "../core/models";
+import { TaskgregatorSettings } from "../settings";
 import {
   applyStatusToLine,
   applyPriorityToLine,
@@ -15,40 +14,27 @@ import {
   formatForLine,
   generateBlockId,
   blockIdOf,
-  todayStr,
   findLine,
-} from "./core/line-transforms";
-import {
-  sidecarPathFor,
-  findSidecarFile,
-  cleanTitleForFile,
-  stripTagsFromTitle,
-  toDDMMYYYY,
-  sidecarFrontmatter,
-  yamlEscape,
-} from "./sidecar";
-import { TaskFormat } from "./core/metadata-codec";
-import { getTasksPluginFormat } from "./tasksInterop";
+} from "../core/line-transforms";
+import { TaskFormat } from "../core/metadata-codec";
+import { SidecarService } from "./sidecar";
 
-// Re-export the pure line transforms for backward-compatible imports.
-export * from "./core/line-transforms";
+/** Provider for the Tasks plugin's configured format (auto-resolution). */
+export type TasksFormatProvider = () => Promise<TaskFormat | null>;
 
 export class TaskWriter {
-  app: App;
-  settings: TaskgregatorSettings;
-
-  constructor(app: App, settings: TaskgregatorSettings) {
-    this.app = app;
-    this.settings = settings;
-  }
+  constructor(
+    private adapter: IVaultAdapter,
+    private sidecar: SidecarService,
+    private settings: TaskgregatorSettings,
+    private getTasksFormat: TasksFormatProvider
+  ) {}
 
   private async editLine(
     task: TaskItem,
     transform: (line: string) => string
   ): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(task.filePath);
-    if (!(file instanceof TFile)) return;
-    await this.app.vault.process(file, (data) => {
+    await this.adapter.process(task.filePath, (data) => {
       const lines = data.split("\n");
       const idx = findLine(lines, task);
       if (idx < 0) return data;
@@ -65,7 +51,7 @@ export class TaskWriter {
   async resolveDefaultFormat(): Promise<TaskFormat> {
     const pref = this.settings.taskFormat;
     if (pref === "emoji" || pref === "dataview") return pref;
-    return (await getTasksPluginFormat(this.app)) ?? "emoji";
+    return (await this.getTasksFormat()) ?? "emoji";
   }
 
   async setStatus(task: TaskItem, statusChar: string): Promise<void> {
@@ -131,7 +117,7 @@ export class TaskWriter {
   /** Ensure a sidecar detail note exists and return its path. */
   async ensureSidecar(task: TaskItem): Promise<string> {
     const blockId = await this.ensureBlockId(task);
-    const path = await this.ensureSidecarFor(blockId, task.text, task.filePath, task);
+    const path = await this.sidecar.ensureSidecarFor(blockId, task.text, task.filePath, task);
     task.sidecarPath = path;
     return path;
   }
@@ -143,28 +129,7 @@ export class TaskWriter {
     sourcePath: string,
     task?: TaskItem
   ): Promise<string> {
-    const existing = findSidecarFile(this.app, this.settings, blockId);
-    if (existing) return existing.path;
-    const folder = normalizePath(this.settings.sidecarFolder);
-    await this.ensureFolder(folder);
-    const titleClean = stripTagsFromTitle(title, task?.tags);
-    const fileName = cleanTitleForFile(title, task?.tags);
-    const path = sidecarPathFor(this.settings, fileName, blockId);
-    const link = `${sourcePath.replace(/\.md$/i, "")}#^${blockId}`;
-    const date = toDDMMYYYY(todayStr());
-    const priorityHex = ["", "#e5484d", "#f5a623", "#4c9aff"][task?.priority || 0] || "";
-    const statusDone = task?.status === "done";
-    const body = sidecarFrontmatter({
-      blockId,
-      date,
-      sourceLink: link,
-      title: yamlEscape(titleClean),
-      priorityHex,
-      tags: task?.tags || [],
-      statusDone,
-    });
-    await this.app.vault.create(path, body);
-    return path;
+    return this.sidecar.ensureSidecarFor(blockId, title, sourcePath, task);
   }
 
   async openSidecar(task: TaskItem): Promise<void> {
@@ -173,24 +138,6 @@ export class TaskWriter {
   }
 
   async openPath(path: string): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(path);
-    if (file instanceof TFile) {
-      await this.app.workspace.getLeaf(true).openFile(file);
-    }
-  }
-
-  private async ensureFolder(folder: string): Promise<void> {
-    const parts = folder.split("/");
-    let cur = "";
-    for (const p of parts) {
-      cur = cur ? `${cur}/${p}` : p;
-      if (!this.app.vault.getAbstractFileByPath(cur)) {
-        try {
-          await this.app.vault.createFolder(cur);
-        } catch {
-          // Already exists / race; ignore.
-        }
-      }
-    }
+    await this.adapter.openFile(path);
   }
 }

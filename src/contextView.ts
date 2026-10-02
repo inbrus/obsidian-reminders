@@ -4,6 +4,7 @@ import { computeContext, ContextScope, DueFilter } from "./context";
 import { SortKey } from "./state";
 import { TaskItem } from "./types";
 import { TaskRowCtx, renderTaskRow } from "./ui";
+import { localISODate } from "./dateFormat";
 
 export const VIEW_TYPE_TASKGREGATOR_CONTEXT = "taskgregator-context-view";
 
@@ -69,13 +70,13 @@ export class TaskgregatorContextView extends ItemView {
   /** Filter a task list by the selected due-date window. */
   private filterByDue(tasks: TaskItem[], filter: DueFilter): TaskItem[] {
     if (filter === "all") return tasks;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localISODate(new Date());
     if (filter === "overdue") return tasks.filter((t) => t.meta.due && t.meta.due < today);
     if (filter === "today") return tasks.filter((t) => t.meta.due === today);
     // "soon": due after today, through today + soonDays.
     const end = new Date();
     end.setDate(end.getDate() + Math.max(1, this.deps.settings.soonDays));
-    const endStr = end.toISOString().slice(0, 10);
+    const endStr = localISODate(end);
     return tasks.filter((t) => t.meta.due && t.meta.due > today && t.meta.due <= endStr);
   }
 
@@ -126,7 +127,7 @@ export class TaskgregatorContextView extends ItemView {
       return;
     }
 
-    const ctx = computeContext(this.app, this.deps.store, this.file);
+    const ctx = computeContext(this.deps.store, this.file);
 
     const header = root.createDiv({ cls: "tg-context-header" });
     const title = header.createDiv({ cls: "tg-context-title" });

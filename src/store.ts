@@ -1,28 +1,35 @@
-// TaskStore: in-memory index of tasks. Stateful; depends on Obsidian (App) for
-// scanning and link resolution. Pure filtering/sorting/grouping and context-tree
-// building live in core/query.ts and core/context.ts.
+// TaskStore: in-memory index of tasks. Stateful; depends on the ports (vault
+// scanner, link resolver, clock) and settings — never on Obsidian directly.
+// Pure filtering/sorting/grouping and context-tree building live in
+// core/query.ts and core/context.ts.
 
-import { App } from "obsidian";
 import { TaskItem, TreeNode } from "./types";
 import { TaskgregatorSettings } from "./settings";
-import { scanVault } from "./parser";
+import { VaultScanner } from "./services/scanner";
+import { ILinkResolver } from "./ports/link-resolver";
+import { IClock } from "./ports/clock";
 import { filterByQuery as filterTasks } from "./core/query";
 import { buildContextTree } from "./core/context";
 
 export class TaskStore {
-  app: App;
-  settings: TaskgregatorSettings;
   tasks: Map<string, TaskItem> = new Map();
 
-  constructor(app: App, settings: TaskgregatorSettings) {
-    this.app = app;
-    this.settings = settings;
-  }
+  constructor(
+    private scanner: VaultScanner,
+    private linkResolver: ILinkResolver,
+    private clock: IClock,
+    readonly settings: TaskgregatorSettings
+  ) {}
 
   async rebuild(): Promise<void> {
-    const all = await scanVault(this.app, this.settings);
+    const all = await this.scanner.scan();
     this.tasks.clear();
     for (const t of all) this.tasks.set(t.id, t);
+  }
+
+  /** Resolve a wikilink target to a vault path (delegates to the link resolver). */
+  resolveLink(link: string, fromPath: string): string | undefined {
+    return this.linkResolver.resolve(link, fromPath);
   }
 
   all(): TaskItem[] {
@@ -54,18 +61,14 @@ export class TaskStore {
   }
 
   /**
-   * Build the context tree, resolving wikilinks through Obsidian's cache. The
-   * tree-building itself is pure (core/context.ts); only link resolution is
-   * Obsidian-specific and injected here.
+   * Build the context tree, resolving wikilinks through the injected resolver.
+   * The tree-building itself is pure (core/context.ts).
    */
   buildContextTree(): TreeNode[] {
     return buildContextTree(
       this.visible(),
       { bucketRoots: this.settings.bucketRoots, inboxRoots: this.settings.inboxRoots },
-      (link, fromPath) => {
-        const dest = this.app.metadataCache.getFirstLinkpathDest(link, fromPath);
-        return dest ? dest.path : undefined;
-      }
+      (link, fromPath) => this.linkResolver.resolve(link, fromPath)
     );
   }
 
@@ -118,26 +121,26 @@ export class TaskStore {
 
   /** Tasks due before today (Overdue smart list core). */
   overdue(): TaskItem[] {
-    const today = this.dayOffset(0);
+    const today = this.clock.todayIso();
     return this.visible().filter((t) => t.meta.due && t.meta.due < today);
   }
 
   /** Tasks due exactly today (Today smart list core). */
   dueToday(): TaskItem[] {
-    const today = this.dayOffset(0);
+    const today = this.clock.todayIso();
     return this.visible().filter((t) => t.meta.due === today);
   }
 
   /** Tasks due tomorrow. */
   dueTomorrow(): TaskItem[] {
-    const tomorrow = this.dayOffset(1);
+    const tomorrow = this.clock.offsetDays(1);
     return this.visible().filter((t) => t.meta.due === tomorrow);
   }
 
   /** Tasks due within the next `soonDays` days (after today, through today+N). */
   dueSoon(): TaskItem[] {
-    const today = this.dayOffset(0);
-    const end = this.dayOffset(Math.max(1, this.settings.soonDays));
+    const today = this.clock.todayIso();
+    const end = this.clock.offsetDays(Math.max(1, this.settings.soonDays));
     return this.visible().filter((t) => t.meta.due && t.meta.due > today && t.meta.due <= end);
   }
 
@@ -148,15 +151,8 @@ export class TaskStore {
    * the ➕ emoji or the [created:: …] Dataview field (handled by the parser).
    */
   aging(): TaskItem[] {
-    const cutoff = this.dayOffset(-Math.max(1, this.settings.agingDays));
+    const cutoff = this.clock.offsetDays(-Math.max(1, this.settings.agingDays));
     return this.visible().filter((t) => t.meta.created && t.meta.created <= cutoff);
-  }
-
-  /** ISO date (YYYY-MM-DD) `n` days from today. */
-  private dayOffset(n: number): string {
-    const d = new Date();
-    d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
   }
 
   counts() {

@@ -48,3 +48,51 @@
    (перенос настроек на declarative API).
 
 Незакоммиченного в ветке `refactor/phase-0-tooling` не осталось.
+
+## Фаза 1 — ядро `core/` (коммит `d5f99bd`)
+
+Вынесена чистая, не зависящая от Obsidian логика в `src/core/`:
+
+- `models.ts`, `parser.ts` (parseLine/deriveBucket/nodeKeyForFile), `line-transforms.ts`,
+  `date.ts`, `metadata-codec.ts`, `status-registry.ts`, `query.ts`, `context.ts`, `identity.ts`.
+- `src/`-файлы стали тонкими шайбами-реэкспортами; vault-bound I/O остался на месте.
+- Критерий: `core/` тестируемо без Obsidian-стаба и без `DEFAULT_SETTINGS`
+  (`tests/core.test.ts` импортирует только `src/core/`).
+- 48 тестов, lint 0 ошибок, build зелёный, поведение byte-идентично.
+
+## Фаза 2 — порты и DI
+
+Введён гексагон `core/ports/infra/services`; composition root собран в `main.ts`.
+
+**Порты (`ports/`, чистые интерфейсы):**
+- `IVaultAdapter` — `scopedFiles/read/exists/process/create/createFolder/listFolder/openFile`.
+- `IClock` — `now/todayIso/offsetDays` (локальный календарь, без UTC-дрейфа).
+- `ILinkResolver` — `resolve(link, fromPath)`.
+
+**Инфраструктура (`infra/`, единственный слой с `import "obsidian"`):**
+- `ObsidianVaultAdapter` (implements `IVaultAdapter` + `ILinkResolver`) — здесь все
+  `vault.*`, `metadataCache.*`, и каждый `instanceof TFile/TFolder`. Единственный
+  `instanceof`-гейт в `src/` — метод `isMarkdownFile`.
+- `ObsidianClock` (implements `IClock`).
+
+**Сервисы (`services/`, зависят только от портов):**
+- `SidecarService` — find/create sidecar; чистая сборка YAML/имени — в `core/sidecar.ts`.
+- `TaskWriter` (тонкий) — применяет чистые `core/line-transforms` через `IVaultAdapter.process`.
+- `VaultScanner` — scan vault → TaskItem[] через адаптер + `core/parser`.
+
+**Изменения поведения:**
+- `TaskStore`/`computeContext` больше не держат `App` — линковка через `ILinkResolver`.
+- UTC-баг «сегодня» починен: `store.overdue/dueToday/dueTomorrow/dueSoon/aging` и
+  `contextView.filterByDue` теперь считают по локальному календарю (`IClock`/`localISODate`).
+- `saveSettings` больше не мутирует `store.settings`/`writer.settings` по ссылке —
+  настройки передаются в конструктор.
+- `instanceof TFile/TFolder` убран из `main.ts` (обработчик vault-событий → `adapter.isMarkdownFile`).
+
+**Гейт:** 53 теста (добавлен `tests/ports.test.ts` — SidecarService/TaskWriter/TaskStore/
+VaultScanner на фейковом адаптере+часах), lint 0 ошибок, build зелёный,
+`core+ports+services` не импортируют `obsidian`.
+
+**Отложено (осознанно):**
+- `ViewDeps` (колбеки view↔main) выпиливается в Фазе 3 вместе с событийной шиной.
+- Замороженный снапшот настроек (SettingsService) — Фаза 4.
+- `display()` в settings.ts (1 warning) — удаляется при переходе настроек на declarative API.

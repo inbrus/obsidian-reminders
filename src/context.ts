@@ -1,8 +1,8 @@
-// Context-sidebar computation. Depends on Obsidian (App + link cache) for link
-// resolution, so the pure types live in core/models.ts and the pure tree
-// builder in core/context.ts; this module keeps only the Obsidian-bound logic.
+// Context-sidebar computation. Resolves wikilinks through the store's injected
+// link resolver (no direct App/metadataCache dependency). The pure types live
+// in core/models.ts; the pure tree builder in core/context.ts.
 
-import { App, TFile } from "obsidian";
+import { TFile } from "obsidian";
 import { TaskItem } from "./types";
 import { TaskStore } from "./store";
 import { ContextResult } from "./core/models";
@@ -22,13 +22,13 @@ export function isFolderNote(file: TFile): boolean {
 }
 
 function resolvesInto(
-  app: App,
+  store: TaskStore,
   task: TaskItem,
   test: (destPath: string) => boolean
 ): boolean {
   for (const link of task.links) {
-    const dest = app.metadataCache.getFirstLinkpathDest(link, task.filePath);
-    if (dest && test(dest.path)) return true;
+    const dest = store.resolveLink(link, task.filePath);
+    if (dest && test(dest)) return true;
   }
   return false;
 }
@@ -44,11 +44,10 @@ function resolvesInto(
  *   folder note, anywhere in its subtree).
  * - all: the deduped union, ordered page → section → reference.
  *
- * References are resolved through Obsidian's link cache (getFirstLinkpathDest),
- * so aliases and path-qualified links both resolve correctly.
+ * References are resolved through the store's link resolver, so aliases and
+ * path-qualified links both resolve correctly.
  */
 export function computeContext(
-  app: App,
   store: TaskStore,
   file: TFile
 ): ContextResult {
@@ -76,7 +75,7 @@ export function computeContext(
     ? (p: string) => inSubtree(p)
     : (p: string) => p === file.path;
   const reference = visible.filter(
-    (t) => !pageSet.has(t.id) && resolvesInto(app, t, refTest)
+    (t) => !pageSet.has(t.id) && resolvesInto(store, t, refTest)
   );
 
   const all: TaskItem[] = [];

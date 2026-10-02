@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import { TaskItem, TreeNode } from "./types";
 import { TaskStore } from "./store";
-import { TaskWriter } from "./writer";
+import { TaskWriter } from "./services/writer";
 import { nodeKeyForFile } from "./parser";
 import { TaskgregatorSettings } from "./settings";
 import { TaskRowCtx, renderTaskRow, promptDate } from "./ui";

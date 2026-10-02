@@ -1,0 +1,160 @@
+// Phase 2 ports tests. The whole stateful stack — SidecarService, TaskWriter,
+// TaskStore, VaultScanner — is exercised against a fake IVaultAdapter/IClock/
+// ILinkResolver, proving the services depend on ports, not on Obsidian's vault.
+// (settings.ts is pulled in only for the TaskgregatorSettings type; it is stubbed
+// via the obsidian alias in vitest.config.ts, same as the existing parser tests.)
+import { describe, it, expect, beforeEach } from "vitest";
+import { IVaultAdapter, VaultFileMeta } from "../src/ports/vault-adapter";
+import { IClock } from "../src/ports/clock";
+import { ILinkResolver } from "../src/ports/link-resolver";
+import { localISODate } from "../src/core/date";
+import { parseLine } from "../src/core/parser";
+import { TaskgregatorSettings, DEFAULT_SETTINGS } from "../src/settings";
+import { SidecarService } from "../src/services/sidecar";
+import { TaskWriter } from "../src/services/writer";
+import { VaultScanner } from "../src/services/scanner";
+import { TaskStore } from "../src/store";
+
+class FakeClock implements IClock {
+  constructor(private iso: string) {}
+  now(): Date {
+    return new Date(this.iso + "T12:00:00");
+  }
+  todayIso(): string {
+    return this.iso;
+  }
+  offsetDays(n: number): string {
+    const d = this.now();
+    d.setDate(d.getDate() + n);
+    return localISODate(d);
+  }
+}
+
+class FakeAdapter implements IVaultAdapter, ILinkResolver {
+  files = new Map<string, string>();
+  folders = new Set<string>();
+  links: Record<string, string> = {};
+  opened: string | undefined;
+  scope: VaultFileMeta[] = [];
+
+  async scopedFiles(): Promise<VaultFileMeta[]> {
+    return this.scope;
+  }
+  async read(path: string): Promise<string> {
+    return this.files.get(path) ?? "";
+  }
+  exists(path: string): boolean {
+    return this.files.has(path) || this.folders.has(path);
+  }
+  async process(path: string, transform: (c: string) => string): Promise<void> {
+    const cur = this.files.get(path) ?? "";
+    this.files.set(path, transform(cur));
+  }
+  async create(path: string, content: string): Promise<void> {
+    this.files.set(path, content);
+  }
+  async createFolder(path: string): Promise<void> {
+    this.folders.add(path);
+  }
+  listFolder(folder: string): string[] {
+    const prefix = folder.replace(/\/$/, "") + "/";
+    return Array.from(this.files.keys())
+      .filter((p) => p.startsWith(prefix))
+      .map((p) => p.split("/").pop() as string);
+  }
+  async openFile(path: string): Promise<void> {
+    this.opened = path;
+  }
+  resolve(link: string, _fromPath: string): string | undefined {
+    return this.links[link];
+  }
+}
+
+const SETTINGS: TaskgregatorSettings = {
+  ...DEFAULT_SETTINGS,
+  sidecarFolder: "Notes/Tasks",
+};
+
+describe("SidecarService over IVaultAdapter", () => {
+  let adapter: FakeAdapter;
+  let clock: FakeClock;
+  let sidecar: SidecarService;
+
+  beforeEach(() => {
+    adapter = new FakeAdapter();
+    clock = new FakeClock("2026-09-30");
+    sidecar = new SidecarService(adapter, clock, SETTINGS);
+  });
+
+  it("creates a sidecar with block identity and links back to source", async () => {
+    const task = parseLine("- [ ] Ship it 🔺 #today", "Projects/A.md", 0, SETTINGS)!;
+    const path = await sidecar.ensureSidecarFor("tg1", task.text, task.filePath, task);
+
+    expect(path).toContain("tg1");
+    const body = adapter.files.get(path)!;
+    expect(body).toContain("blockId: tg1");
+    expect(body).toContain('source-task: "[[Projects/A#^tg1|Source →]]"');
+    expect(body).toContain('priority-task: "#e5484d"');
+    expect(body).toContain('  - "#today"');
+  });
+
+  it("finds an existing sidecar by block id across title changes", async () => {
+    await sidecar.ensureSidecarFor("tg2", "Old title", "Projects/A.md");
+    const found = sidecar.findByBlockId("tg2");
+    expect(found).toBeTruthy();
+    expect(found).toContain("tg2");
+  });
+});
+
+describe("TaskWriter over IVaultAdapter", () => {
+  it("writes priority through adapter.process, preserving on-disk format", async () => {
+    const adapter = new FakeAdapter();
+    const clock = new FakeClock("2026-09-30");
+    const sidecar = new SidecarService(adapter, clock, SETTINGS);
+    const writer = new TaskWriter(adapter, sidecar, SETTINGS, async () => null);
+
+    const task = parseLine("- [ ] Do the thing", "Projects/A.md", 0, SETTINGS)!;
+    adapter.files.set(task.filePath, "- [ ] Do the thing");
+
+    await writer.setPriority(task, 2);
+    expect(adapter.files.get(task.filePath)).toContain("⏫");
+  });
+});
+
+describe("TaskStore over ports (end-to-end without Obsidian)", () => {
+  it("indexes and slices 'today' via the injected clock", async () => {
+    const adapter = new FakeAdapter();
+    const clock = new FakeClock("2026-09-30");
+    const sidecar = new SidecarService(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const store = new TaskStore(scanner, adapter, clock, SETTINGS);
+
+    adapter.scope = [{ path: "Projects/A.md", mtime: 1, ctime: 1 }];
+    adapter.files.set(
+      "Projects/A.md",
+      ["- [ ] Due today 📅 2026-09-30", "- [ ] Due tomorrow 📅 2026-10-01", "- [ ] No date"].join("\n")
+    );
+
+    await store.rebuild();
+
+    expect(store.dueToday().map((t) => t.text)).toEqual(["Due today"]);
+    expect(store.dueTomorrow().map((t) => t.text)).toEqual(["Due tomorrow"]);
+    expect(store.visible()).toHaveLength(3);
+  });
+
+  it("resolves context-tree links through the injected link resolver", async () => {
+    const adapter = new FakeAdapter();
+    const clock = new FakeClock("2026-09-30");
+    const sidecar = new SidecarService(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const store = new TaskStore(scanner, adapter, clock, SETTINGS);
+
+    adapter.scope = [{ path: "Projects/A.md", mtime: 1, ctime: 1 }];
+    adapter.files.set("Projects/A.md", "- [ ] Links to [[Person]]");
+    adapter.links["Person"] = "People/Person.md";
+
+    await store.rebuild();
+    const tree = store.buildContextTree();
+    expect(tree.map((r) => r.label)).toContain("Projects");
+  });
+});

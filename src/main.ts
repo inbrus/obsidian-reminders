@@ -1,7 +1,7 @@
 import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext } from "obsidian";
 import { TaskgregatorSettings, DEFAULT_SETTINGS, TaskgregatorSettingTab } from "./settings";
 import { TaskStore } from "./store";
-import { TaskWriter } from "./writer";
+import { TaskWriter } from "./services/writer";
 import {
   isTaskLine,
   applyPriorityToLine,
@@ -9,9 +9,13 @@ import {
   toggleTagInLine,
   ensureBlockIdInLine,
   formatForLine,
-} from "./writer";
+} from "./core/line-transforms";
 import { parseLine, NAV_SECTIONS } from "./parser";
-import { findSidecarFile } from "./sidecar";
+import { SidecarService } from "./services/sidecar";
+import { VaultScanner } from "./services/scanner";
+import { ObsidianVaultAdapter } from "./infra/obsidian-vault-adapter";
+import { ObsidianClock } from "./infra/obsidian-clock";
+import { getTasksPluginFormat } from "./tasksInterop";
 import { TaskgregatorView, VIEW_TYPE_TASKGREGATOR, ViewDeps } from "./view";
 import { TaskgregatorNavView, VIEW_TYPE_TASKGREGATOR_NAV } from "./navView";
 import { TaskgregatorState } from "./state";
@@ -25,12 +29,25 @@ export default class Taskgregator extends Plugin {
   store!: TaskStore;
   writer!: TaskWriter;
   state!: TaskgregatorState;
+  private sidecar!: SidecarService;
   private refreshTimer: number | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.store = new TaskStore(this.app, this.settings);
-    this.writer = new TaskWriter(this.app, this.settings);
+
+    // Composition root: build the container bottom-up. The adapter is the single
+    // point of contact with Obsidian's vault; services depend on ports only.
+    const adapter = new ObsidianVaultAdapter(this.app);
+    const clock = new ObsidianClock();
+    this.sidecar = new SidecarService(adapter, clock, this.settings);
+    const scanner = new VaultScanner(adapter, this.sidecar, this.settings);
+    this.store = new TaskStore(scanner, adapter, clock, this.settings);
+    this.writer = new TaskWriter(
+      adapter,
+      this.sidecar,
+      this.settings,
+      () => getTasksPluginFormat(this.app)
+    );
     this.state = new TaskgregatorState();
 
     const deps: ViewDeps = {
@@ -107,7 +124,7 @@ export default class Taskgregator extends Plugin {
 
     // Keep the index fresh as the vault changes (debounced).
     const onChange = (f: TAbstractFile) => {
-      if (f instanceof TFile && f.extension === "md") this.scheduleRefresh();
+      if (adapter.isMarkdownFile(f)) this.scheduleRefresh();
     };
     this.registerEvent(this.app.vault.on("modify", onChange));
     this.registerEvent(this.app.vault.on("create", onChange));
@@ -173,13 +190,13 @@ export default class Taskgregator extends Plugin {
 
   /** Does a detail (sidecar) note exist for this block id? */
   private hasSidecar(blockId: string): boolean {
-    return findSidecarFile(this.app, this.settings, blockId) !== null;
+    return this.sidecar.findByBlockId(blockId) !== undefined;
   }
 
   /** Open the detail note for a block id (used by the inline note icons). */
   private openSidecarById(blockId: string): void {
-    const f = findSidecarFile(this.app, this.settings, blockId);
-    if (f) void this.writer.openPath(f.path);
+    const path = this.sidecar.findByBlockId(blockId);
+    if (path) void this.writer.openPath(path);
   }
 
   /**
@@ -442,8 +459,6 @@ export default class Taskgregator extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
-    if (this.store) this.store.settings = this.settings;
-    if (this.writer) this.writer.settings = this.settings;
     await this.reindex();
   }
 }

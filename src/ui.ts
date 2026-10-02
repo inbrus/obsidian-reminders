@@ -1,6 +1,6 @@
 import { App, Menu, Modal, setIcon } from "obsidian";
 import { TaskItem } from "./types";
-import { TaskWriter } from "./writer";
+import { TaskWriter } from "./services/writer";
 import { ALT_CHECKBOX_ICONS, nextStatusChar } from "./parser";
 import { toIso, fromIso, localISODate } from "./dateFormat";
 
