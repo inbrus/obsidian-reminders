@@ -2,7 +2,7 @@
 // them into TaskItems via the pure parser. Replaces the old scanVault/scanFile
 // that lived in src/parser.ts and walked TFile/TFolder directly.
 
-import { IVaultAdapter } from "../ports/vault-adapter";
+import { IVaultAdapter, VaultFileMeta } from "../ports/vault-adapter";
 import { TaskItem } from "../core/models";
 import { TaskgregatorSettings } from "../settings";
 import { parseLine, isIgnored } from "../core/parser";
@@ -15,14 +15,19 @@ export class VaultScanner {
     private settings: TaskgregatorSettings
   ) {}
 
-  async scan(): Promise<TaskItem[]> {
+  /** Non-ignored markdown files in scope, with stat times (deduped by adapter). */
+  async listFiles(): Promise<VaultFileMeta[]> {
     const files = await this.adapter.scopedFiles(
       this.settings.bucketRoots,
       this.settings.inboxRoots
     );
+    return files.filter((f) => !isIgnored(f.path, this.settings));
+  }
+
+  async scan(): Promise<TaskItem[]> {
+    const files = await this.listFiles();
     const out: TaskItem[] = [];
     for (const file of files) {
-      if (isIgnored(file.path, this.settings)) continue;
       out.push(...(await this.scanContent(file.path, file.mtime, file.ctime)));
     }
     return out;

@@ -167,11 +167,24 @@ export function ensureBlockIdInLine(line: string): { line: string; blockId: stri
   return { line: line.trimEnd() + " ^" + id, blockId: id };
 }
 
-/** Locate the exact line index for a task, resilient to small shifts. */
-export function findLine(lines: string[], task: TaskItem): number {
+/**
+ * Locate the exact line index for a task, resilient to small shifts. Resolution
+ * order: block id → content-hash fingerprint → raw text at/around `line` → text
+ * substring. `hashOf` recomputes a line's content hash (needed for the
+ * fingerprint step); callers that only have lines + task may omit it.
+ */
+export function findLine(
+  lines: string[],
+  task: TaskItem,
+  hashOf?: (line: string) => string | undefined
+): number {
   if (task.blockId) {
     const needle = "^" + task.blockId;
     const idx = lines.findIndex((l) => l.trimEnd().endsWith(needle));
+    if (idx >= 0) return idx;
+  }
+  if (hashOf && task.contentHash) {
+    const idx = lines.findIndex((l) => hashOf(l) === task.contentHash);
     if (idx >= 0) return idx;
   }
   if (lines[task.line] === task.rawText) return task.line;

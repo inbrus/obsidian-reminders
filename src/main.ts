@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext } from "obsidian";
+import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext, normalizePath } from "obsidian";
 import { TaskgregatorSettings, DEFAULT_SETTINGS, TaskgregatorSettingTab } from "./settings";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./services/writer";
@@ -25,6 +25,8 @@ import { TaskgregatorContextView, VIEW_TYPE_TASKGREGATOR_CONTEXT } from "./conte
 import { noteIconLivePreview } from "./livePreview";
 import { maybeShowChangelog, openChangelog } from "./changelog";
 import { buildMenu, priorityActions } from "./editor/menu";
+import { ObsidianStorage } from "./infra/obsidian-storage";
+import { IndexPersistence } from "./services/index-persistence";
 
 export default class Taskgregator extends Plugin {
   settings!: TaskgregatorSettings;
@@ -37,6 +39,7 @@ export default class Taskgregator extends Plugin {
   private pendingPaths = new Set<string>();
   private pendingRemoves = new Set<string>();
   private lastScopeKey = "";
+  private persistence!: IndexPersistence;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -45,6 +48,10 @@ export default class Taskgregator extends Plugin {
     // point of contact with Obsidian's vault; services depend on ports only.
     const adapter = new ObsidianVaultAdapter(this.app);
     const clock = new ObsidianClock();
+    this.persistence = new IndexPersistence(
+      new ObsidianStorage(this.app),
+      normalizePath(`${this.manifest.dir}/index.cache.json`)
+    );
     this.sidecar = new SidecarService(adapter, clock, this.settings);
     const scanner = new VaultScanner(adapter, this.sidecar, this.settings);
     this.store = new TaskStore(scanner, adapter, clock, this.settings);
@@ -171,7 +178,9 @@ export default class Taskgregator extends Plugin {
     );
 
     this.app.workspace.onLayoutReady(async () => {
-      await this.store.rebuild();
+      const cache = await this.persistence.load();
+      await this.store.rebuild(cache ?? undefined);
+      await this.persistence.save(this.store.buildSnapshot());
       // Dock the nav in the left sidebar so its tab icon sits at the top next
       // to Files/Search (no ribbon icon).
       await this.ensureNav();
@@ -363,6 +372,7 @@ export default class Taskgregator extends Plugin {
 
   async reindex(): Promise<void> {
     await this.store.rebuild();
+    await this.persistence.save(this.store.buildSnapshot());
     this.bus.emit("index:updated", { full: true });
   }
 

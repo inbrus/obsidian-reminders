@@ -12,6 +12,7 @@ import { ILinkResolver } from "./ports/link-resolver";
 import { IClock } from "./ports/clock";
 import { filterByQuery as filterTasks } from "./core/query";
 import { buildContextTree } from "./core/context";
+import { IndexSnapshot, INDEX_SCHEMA_VERSION } from "./services/index-persistence";
 
 function addIndex<K>(map: Map<K, Set<string>>, key: K, id: string): void {
   let s = map.get(key);
@@ -74,11 +75,40 @@ export class TaskStore {
     this.byBlockIdIndex.clear();
   }
 
-  /** Full rescan: startup, Reindex command, or a scope/settings change. */
-  async rebuild(): Promise<void> {
-    const all = await this.scanner.scan();
+  /**
+   * Full (re)scan: startup, Reindex command, or a scope/settings change. When a
+   * prior cache snapshot is provided, files whose mtime is unchanged are
+   * restored from the cache instead of being re-read from disk.
+   */
+  async rebuild(cache?: IndexSnapshot): Promise<void> {
+    const files = await this.scanner.listFiles();
     this.clearIndexes();
-    for (const t of all) this.indexOne(t);
+    for (const f of files) {
+      const cached = cache?.files[f.path];
+      if (cached && cached.mtime === f.mtime) {
+        for (const t of cached.tasks) this.indexOne(t);
+      } else {
+        const tasks = await this.scanner.scanFile(f.path);
+        for (const t of tasks) this.indexOne(t);
+      }
+    }
+  }
+
+  /** Serialize the current index into a cache snapshot for IndexPersistence. */
+  buildSnapshot(): IndexSnapshot {
+    const files: Record<string, { mtime: number; tasks: TaskItem[] }> = {};
+    for (const [path, ids] of this.byFile) {
+      let mtime = 0;
+      const tasks: TaskItem[] = [];
+      for (const id of ids) {
+        const t = this.tasks.get(id);
+        if (!t) continue;
+        tasks.push(t);
+        if (t.mtime > mtime) mtime = t.mtime;
+      }
+      files[path] = { mtime, tasks };
+    }
+    return { schemaVersion: INDEX_SCHEMA_VERSION, files, builtAt: Date.now() };
   }
 
   /** Incrementally re-read one file and replace its tasks in the index. */

@@ -17,6 +17,7 @@ import {
   findLine,
 } from "../core/line-transforms";
 import { TaskFormat } from "../core/metadata-codec";
+import { parseLine } from "../core/parser";
 import { SidecarService } from "./sidecar";
 
 /** Provider for the Tasks plugin's configured format (auto-resolution). */
@@ -36,7 +37,9 @@ export class TaskWriter {
   ): Promise<void> {
     await this.adapter.process(task.filePath, (data) => {
       const lines = data.split("\n");
-      const idx = findLine(lines, task);
+      const idx = findLine(lines, task, (line) =>
+        parseLine(line, task.filePath, 0, this.settings)?.contentHash
+      );
       if (idx < 0) return data;
       lines[idx] = transform(lines[idx]);
       return lines.join("\n");

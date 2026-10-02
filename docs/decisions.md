@@ -126,3 +126,38 @@ flat-fallback в одном месте). Дубль priority/due/tag/note-дей
 
 **Гейт:** 53 теста, lint 0 ошибок / 5 отложенных warnings, build зелёный,
 `core+ports+services` не импортируют `obsidian`, `instanceof` только в адаптере.
+
+## Фаза 4 — индекс и идентичность
+
+**Двухчастная идентичность (`core/identity.ts`):** `id` больше не зависит от строки.
+`stableIdFor` = `path#^blockId` при наличии blockId, иначе `path#<content-fingerprint>`
+(FNV-1a от `path + status + нормализованного тела`). `line` — это location, не identity.
+`TaskItem.contentHash` добавлен; `parseLine` вычисляет `stableId`/`contentHash`.
+
+**Инкрементальный индекс (`TaskStore`):** инвертированные индексы
+`byFile/byTag/byLink/byDue/byStatus/byBlockId`; `applyFile(path)`/`removeFile(path)`
+обновляют один файл без полного перескана; `counts()` — один проход по
+open∪inProgress. `IVaultAdapter.stat` + `VaultScanner.scanFile`/`listFiles`.
+
+**События vault (`main.ts`):** modify/create → `applyFile`, delete → `removeFile`,
+rename → `removeFile(old)+applyFile(new)`, батчинг с дебаунсом 600 мс.
+`reindexFile` точечный; `activateView` без полного rebuild; `saveSettings`
+переиндексирует только при смене scope-ключей (`bucketRoots/inboxRoots/ignorePaths`).
+
+**IndexPersistence (`services/index-persistence.ts` + `ports/storage.ts`):** кеш
+`IndexSnapshot {schemaVersion, files{path:{mtime,tasks}}, builtAt}` в отдельном файле
+`<plugin-dir>/index.cache.json` (не `data.json`), через `IStorage`/`ObsidianStorage`.
+На старте файлы с неизменившимся mtime восстанавливаются из кеша, остальные
+перечитываются. Кеш не авторитетен — markdown остаётся источником истины.
+
+**Стабильность связей:** `findLine` разрешает строку в порядке blockId → content-hash
+→ rawText → text; жадный `ensureBlockId` ставит blockId при первом контакте со sidecar
+(уже был в писателе). sidecar-связь переживает сдвиг строк и правку текста.
+
+**Гейт:** 59 тестов, lint 0 ошибок / 5 отложенных warnings, build зелёный,
+`core+ports+services` без `obsidian`, `instanceof` только в адаптере.
+
+**Отложено (осознанно):** `IdentityMigration` (schemaVersion в sidecar YAML + команда
+«Repair identities» — backfill blockId, пометка осиротевших) — отдельный под-этап.
+Форк уже на blockId-схеме (legacy line-id данных нет); backfill — деструктивная
+операция над markdown, по канону требует dry-run + одобрение Johan.

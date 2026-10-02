@@ -14,6 +14,8 @@ import { SidecarService } from "../src/services/sidecar";
 import { TaskWriter } from "../src/services/writer";
 import { VaultScanner } from "../src/services/scanner";
 import { TaskStore } from "../src/store";
+import { IStorage } from "../src/ports/storage";
+import { IndexPersistence, IndexSnapshot, INDEX_SCHEMA_VERSION } from "../src/services/index-persistence";
 
 class FakeClock implements IClock {
   constructor(private iso: string) {}
@@ -75,6 +77,19 @@ class FakeAdapter implements IVaultAdapter, ILinkResolver {
   }
   resolve(link: string, _fromPath: string): string | undefined {
     return this.links[link];
+  }
+}
+
+class FakeStorage implements IStorage {
+  files = new Map<string, string>();
+  async read(path: string): Promise<string | null> {
+    return this.files.has(path) ? this.files.get(path)! : null;
+  }
+  async write(path: string, data: string): Promise<void> {
+    this.files.set(path, data);
+  }
+  async remove(path: string): Promise<void> {
+    this.files.delete(path);
   }
 }
 
@@ -213,5 +228,54 @@ describe("TaskStore incremental index (applyFile/removeFile)", () => {
     await store.rebuild();
     expect(store.byBlockId("block123")?.text).toBe("Alpha");
     expect(store.byBlockId("nope")).toBeUndefined();
+  });
+});
+
+describe("IndexPersistence over IStorage", () => {
+  it("round-trips a snapshot and rejects a wrong schema version", async () => {
+    const storage = new FakeStorage();
+    const p = new IndexPersistence(storage, "cache.json");
+    expect(await p.load()).toBeNull();
+
+    const snapshot: IndexSnapshot = {
+      schemaVersion: INDEX_SCHEMA_VERSION,
+      files: { "Projects/A.md": { mtime: 5, tasks: [] } },
+      builtAt: 1,
+    };
+    await p.save(snapshot);
+    expect((await p.load())?.files["Projects/A.md"].mtime).toBe(5);
+
+    storage.files.set("cache.json", JSON.stringify({ schemaVersion: 999, files: {}, builtAt: 1 }));
+    expect(await p.load()).toBeNull();
+  });
+
+  it("rebuild restores unchanged files from cache and re-reads changed ones", async () => {
+    const adapter = new FakeAdapter();
+    const clock = new FakeClock("2026-09-30");
+    const sidecar = new SidecarService(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const store = new TaskStore(scanner, adapter, clock, SETTINGS);
+
+    adapter.scope = [
+      { path: "Projects/A.md", mtime: 1, ctime: 1 },
+      { path: "Projects/B.md", mtime: 1, ctime: 1 },
+    ];
+    adapter.files.set("Projects/A.md", "- [ ] Alpha");
+    adapter.files.set("Projects/B.md", "- [ ] Beta");
+    await store.rebuild();
+    const snapshot = store.buildSnapshot();
+
+    // B.md changed on disk: mtime bump + new content.
+    adapter.files.set("Projects/B.md", "- [ ] Beta v2");
+    adapter.scope = [
+      { path: "Projects/A.md", mtime: 1, ctime: 1 },
+      { path: "Projects/B.md", mtime: 9, ctime: 1 },
+    ];
+
+    // Rebuild with the stale snapshot: A.md restored from cache (mtime match),
+    // B.md re-read (mtime mismatch).
+    await store.rebuild(snapshot);
+
+    expect(store.visible().map((t) => t.text).sort()).toEqual(["Alpha", "Beta v2"]);
   });
 });
