@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext, normalizePath, Notice } from "obsidian";
+import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, Menu, Editor, MarkdownView, MarkdownFileInfo, MarkdownPostProcessorContext, normalizePath, Notice, setIcon } from "obsidian";
 import { TaskgregatorSettings, DEFAULT_SETTINGS, TaskgregatorSettingTab } from "./settings";
 import { TaskStore } from "./store";
 import { TaskWriter } from "./services/writer";
@@ -290,7 +290,8 @@ export default class Taskgregator extends Plugin {
       if (!this.hasSidecar(bid)) return;
       if (li.querySelector(".tg-inline-note")) return;
 
-      const icon = createSpan({ cls: "tg-inline-note", text: "📝" });
+      const icon = createSpan({ cls: "tg-inline-note" });
+      setIcon(icon, "sticky-note");
       icon.setAttr("aria-label", "Open task note");
       icon.onClickEvent((e) => {
         e.preventDefault();

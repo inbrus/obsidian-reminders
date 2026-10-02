@@ -1,5 +1,6 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
+import { setIcon } from "obsidian";
 
 // A plugin-generated block id at the end of a task line, e.g. " ^tg1a2b3c".
 const TG_BLOCKID_RE = /\s\^(tg[a-z0-9]+)\s*$/i;
@@ -21,7 +22,8 @@ export function noteIconLivePreview(
       return other.blockId === this.blockId;
     }
     toDOM(): HTMLElement {
-      const span = createSpan({ cls: "tg-inline-note tg-lp-note", text: "📝" });
+      const span = createSpan({ cls: "tg-inline-note tg-lp-note" });
+      setIcon(span, "sticky-note");
       span.setAttribute("aria-label", "Open task note");
       span.onmousedown = (e) => {
         e.preventDefault();

@@ -4,6 +4,7 @@ import { TaskWriter } from "./services/writer";
 import { ALT_CHECKBOX_ICONS, nextStatusChar } from "./parser";
 import { toIso, fromIso, localISODate } from "./dateFormat";
 import { buildMenu, priorityActions } from "./editor/menu";
+import { iconForEmoji } from "./core/icon-map";
 
 /**
  * Shared task-row rendering used by both the full Taskgregator hub view and the
@@ -119,7 +120,8 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
     if (days !== undefined) {
       const age = meta.createSpan({ cls: "tg-chip tg-age" });
       if (days >= Math.max(1, ctx.agingDays)) age.addClass("is-aged");
-      age.setText("🌱 " + formatAge(days));
+      setIcon(age.createSpan({ cls: "tg-chip-icon" }), iconForEmoji("🌱", "sprout"));
+      age.appendText(" " + formatAge(days));
       age.setAttr("aria-label", "Created " + task.meta.created);
     }
   }
@@ -133,7 +135,8 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   if (task.meta.start) renderDateChip(ctx.app, meta, task.meta.start, "🛫");
   for (const tag of task.tags) meta.createSpan({ cls: "tg-chip tg-tag", text: "#" + tag });
   if (task.sidecarPath) {
-    const note = meta.createSpan({ cls: "tg-chip tg-note", text: "📝" });
+    const note = meta.createSpan({ cls: "tg-chip tg-note" });
+    setIcon(note, "sticky-note");
     note.setAttr("aria-label", "Open detail note");
     note.onclick = (ev) => {
       ev.stopPropagation();
@@ -370,8 +373,9 @@ function renderDateChip(
   const target = display;
   const a = parent.createEl("a", {
     cls: "tg-link internal-link tg-date-link" + (extraCls ? " " + extraCls : ""),
-    text: `${emoji} ${display}`,
   });
+  setIcon(a.createSpan({ cls: "tg-chip-icon" }), iconForEmoji(emoji, "calendar"));
+  a.appendText(" " + display);
   a.onclick = (ev) => {
     ev.preventDefault();
     void app.workspace.openLinkText(target, "", false);

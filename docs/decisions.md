@@ -164,3 +164,28 @@ rename → `removeFile(old)+applyFile(new)`, батчинг с дебаунсо�
 помечают осиротевшие. Dry-run по умолчанию; запись идемпотентна (не трогает формат
 markdown, кроме добавления `^blockId`). Форк уже на blockId-схеме — legacy line-id
 данных нет, поэтому reconcile ограничен backfill + orphan-разметкой.
+
+## Фаза 5 — иконки и финал
+
+**IconRegistry (`core/icon-map.ts` + `setIcon`):** эмодзи остаются on-disk форматом
+(Tasks-plugin interop); UI рендерит Lucide-иконки через единый `iconForEmoji`
+(📅→calendar, 🛫→plane, ⏳→hourglass, ➕→plus, ✅→check-check, ❌→ban, 🔁→repeat,
+🌱→sprout, 📝→sticky-note). Переведены чипы дат/возраста/заметки (`ui.ts`) и
+inline-иконка заметки (`main.ts`, `livePreview.ts`). Приоритеты остаются цветными
+кругами (не эмодзи). Данные не меняются — меняется только представление.
+
+**Аудит lint:** 0 ошибок / 0 warnings. `sentence-case` получает `ignoreWords`
+(`Taskgregator`/`Tasks` — собственные имена); legacy `display()` удалён — настройки
+полностью рендерятся через `getSettingDefinitions()` (minAppVersion 1.13.0),
+«Reindex now» переведён в `SettingDefinitionAction`.
+
+**Byte-идентичность (`tests/line-transforms.test.ts`):** 10 тестов фиксируют точный
+байтовый вывод записи (due/start/priority/tag/blockId) и идемпотентность — повторная
+запись не дублирует и не переставляет signifier'ы; смена статуса чистит устаревшие
+даты в обоих форматах.
+
+**Гейт:** 73 теста, lint 0/0, build зелёный, `core/ports/services` без `obsidian`,
+`instanceof` только в адаптере, UI-рендер без текстовых эмодзи.
+
+**Ручной прогон (Johan):** desktop + mobile — собрать `main.js`, проверить
+чипы/иконки и settings-вкладку.

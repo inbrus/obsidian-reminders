@@ -261,6 +261,14 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
           options: { auto: "Auto (follow Tasks plugin)", emoji: "Emoji (Tasks)", dataview: "Dataview" },
         },
       },
+      {
+        name: "Reindex now",
+        desc: "Rescan the vault for tasks.",
+        action: (el) => {
+          const btn = el.createEl("button", { text: "Reindex" });
+          btn.addEventListener("click", () => void this.plugin.reindex());
+        },
+      },
     ];
   }
 
@@ -339,178 +347,6 @@ export class TaskgregatorSettingTab extends PluginSettingTab {
         return;
     }
     await this.plugin.saveSettings();
-  }
-
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-
-    new Setting(containerEl).setName("Context").setHeading();
-
-    new Setting(containerEl)
-      .setName("Bucket roots")
-      .setDesc("Comma-separated top-level folders whose files become context buckets.")
-      .addText((t) =>
-        t
-          .setValue(this.plugin.settings.bucketRoots.join(", "))
-          .onChange(async (v) => {
-            this.plugin.settings.bucketRoots = splitList(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Inbox roots")
-      .setDesc("Folders treated as a flat inbox (tasks grouped together, not per file). E.g. Dailies.")
-      .addText((t) =>
-        t
-          .setValue(this.plugin.settings.inboxRoots.join(", "))
-          .onChange(async (v) => {
-            this.plugin.settings.inboxRoots = splitList(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Ignore paths")
-      .setDesc("Comma-separated path prefixes to exclude from indexing.")
-      .addText((t) =>
-        t
-          .setValue(this.plugin.settings.ignorePaths.join(", "))
-          .onChange(async (v) => {
-            this.plugin.settings.ignorePaths = splitList(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Priority tags")
-      .setDesc("Highest-first, comma-separated without #, for example p1, p2, p3.")
-      .addText((t) =>
-        t
-          .setValue(this.plugin.settings.priorityTags.join(", "))
-          .onChange(async (v) => {
-            this.plugin.settings.priorityTags = splitList(v).map((s) => s.replace(/^#/, ""));
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Smart lists")
-      .setDesc("Cross-cutting tag lists as name:tag pairs, comma-separated. For example: today:today, followup:someday.")
-      .addTextArea((t) =>
-        t
-          .setValue(
-            this.plugin.settings.smartLists.map((s) => `${s.name}:${s.tag}`).join(", ")
-          )
-          .onChange(async (v) => {
-            this.plugin.settings.smartLists = parseSmartLists(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Detail-note folder")
-      .setDesc("Where per-task detail notes (sidecars) are stored.")
-      .addText((t) =>
-        t
-          .setValue(this.plugin.settings.sidecarFolder)
-          .onChange(async (v) => {
-            this.plugin.settings.sidecarFolder = v.trim().replace(/\/$/, "");
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Soon window (days)")
-      .setDesc("Soon list shows tasks due within this many days (default 7).")
-      .addText((t) =>
-        t
-          .setValue(String(this.plugin.settings.soonDays))
-          .onChange(async (v) => {
-            this.plugin.settings.soonDays = clampDays(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Aging threshold (days)")
-      .setDesc("Aging list shows still-open tasks created this many days ago or older (default 14).")
-      .addText((t) =>
-        t
-          .setValue(String(this.plugin.settings.agingDays))
-          .onChange(async (v) => {
-            this.plugin.settings.agingDays = clampDays(v, 14);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Context sidebar")
-      .setDesc(
-        "Auto-open the file-context task panel in the right sidebar on startup. " +
-          "The panel follows the active note; for a folder note (filename matches its folder) it scopes to the whole folder subtree."
-      )
-      .addToggle((tg) =>
-        tg.setValue(this.plugin.settings.enableContextSidebar).onChange(async (v) => {
-          this.plugin.settings.enableContextSidebar = v;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Show changelog on update")
-      .setDesc("Show the changelog automatically the first time the plugin loads after an update.")
-      .addToggle((tg) =>
-        tg.setValue(this.plugin.settings.showChangelogOnUpdate).onChange(async (v) => {
-          this.plugin.settings.showChangelogOnUpdate = v;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Load Taskgregator on startup")
-      .setDesc("Open the main Taskgregator panel to a list automatically when Obsidian starts.")
-      .addDropdown((dd) =>
-        dd
-          .addOption("disabled", "Disabled")
-          .addOption("today", "Today")
-          .addOption("all", "All")
-          .addOption("flagged", "Flagged")
-          .setValue(this.plugin.settings.startupView)
-          .onChange(async (v) => {
-            this.plugin.settings.startupView = normalizeStartupView(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Task metadata format")
-      .setDesc(
-        "How Taskgregator writes dates and priority on new/edited tasks. " +
-          "Auto follows the Tasks plugin's format (emoji if Tasks isn't installed). " +
-          "Reading always understands both emoji and Dataview; existing lines keep their own format."
-      )
-      .addDropdown((dd) =>
-        dd
-          .addOption("auto", "Auto (follow Tasks plugin)")
-          .addOption("emoji", "Emoji (Tasks)")
-          .addOption("dataview", "Dataview")
-          .setValue(this.plugin.settings.taskFormat)
-          .onChange(async (v) => {
-            this.plugin.settings.taskFormat = normalizeTaskFormat(v);
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Reindex now")
-      .setDesc("Rescan the vault for tasks.")
-      .addButton((b) =>
-        b.setButtonText("Reindex").onClick(async () => {
-          await this.plugin.reindex();
-        })
-      );
   }
 }
 
