@@ -68,6 +68,12 @@ export class ObsidianVaultAdapter implements IVaultAdapter, ILinkResolver {
     return "";
   }
 
+  async stat(path: string): Promise<VaultFileMeta | null> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return null;
+    return { path, mtime: file.stat?.mtime ?? 0, ctime: file.stat?.ctime ?? 0 };
+  }
+
   exists(path: string): boolean {
     return this.app.vault.getAbstractFileByPath(path) != null;
   }

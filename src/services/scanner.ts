@@ -23,18 +23,25 @@ export class VaultScanner {
     const out: TaskItem[] = [];
     for (const file of files) {
       if (isIgnored(file.path, this.settings)) continue;
-      out.push(...(await this.scanFile(file.path, file.mtime, file.ctime)));
+      out.push(...(await this.scanContent(file.path, file.mtime, file.ctime)));
     }
     return out;
   }
 
-  /** Scan a single file for tasks, given its stat times (no re-stat needed). */
-  private async scanFile(
+  /** Scan a single file (re-stat then parse). Returns [] if missing or ignored. */
+  async scanFile(path: string): Promise<TaskItem[]> {
+    if (isIgnored(path, this.settings)) return [];
+    const stat = await this.adapter.stat(path);
+    if (!stat) return [];
+    return this.scanContent(path, stat.mtime, stat.ctime);
+  }
+
+  /** Parse one file's content into tasks, given its stat times (no re-stat). */
+  private async scanContent(
     path: string,
     mtime: number,
     ctime: number
   ): Promise<TaskItem[]> {
-    if (isIgnored(path, this.settings)) return [];
     const content = await this.adapter.read(path);
     const lines = content.split("\n");
     const out: TaskItem[] = [];

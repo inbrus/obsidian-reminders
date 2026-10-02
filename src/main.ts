@@ -34,6 +34,9 @@ export default class Taskgregator extends Plugin {
   bus!: EventBus;
   private sidecar!: SidecarService;
   private refreshTimer: number | null = null;
+  private pendingPaths = new Set<string>();
+  private pendingRemoves = new Set<string>();
+  private lastScopeKey = "";
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -119,14 +122,30 @@ export default class Taskgregator extends Plugin {
       ),
     ]);
 
-    // Keep the index fresh as the vault changes (debounced).
-    const onChange = (f: TAbstractFile) => {
-      if (adapter.isMarkdownFile(f)) this.scheduleRefresh();
-    };
-    this.registerEvent(this.app.vault.on("modify", onChange));
-    this.registerEvent(this.app.vault.on("create", onChange));
-    this.registerEvent(this.app.vault.on("delete", onChange));
-    this.registerEvent(this.app.vault.on("rename", onChange));
+    // Keep the index fresh as the vault changes (debounced, per-file).
+    this.registerEvent(
+      this.app.vault.on("modify", (f: TAbstractFile) => {
+        if (adapter.isMarkdownFile(f)) this.scheduleApplyFile(f.path);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("create", (f: TAbstractFile) => {
+        if (adapter.isMarkdownFile(f)) this.scheduleApplyFile(f.path);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (f: TAbstractFile) => {
+        if (adapter.isMarkdownFile(f)) this.scheduleRemoveFile(f.path);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (f: TAbstractFile, oldPath: string) => {
+        if (adapter.isMarkdownFile(f)) {
+          this.scheduleRemoveFile(oldPath);
+          this.scheduleApplyFile(f.path);
+        }
+      })
+    );
 
     // Keep the context sidebar pointed at the active file. When one of our own
     // views is focused (nav/list), clear the sidebar instead of leaving the
@@ -256,7 +275,6 @@ export default class Taskgregator extends Plugin {
 
   async activateView(): Promise<void> {
     const { workspace } = this.app;
-    await this.store.rebuild();
 
     // Nav lives in the left dock.
     await this.ensureNav();
@@ -313,12 +331,34 @@ export default class Taskgregator extends Plugin {
     this.bus.emit("file:changed", { path: file?.path ?? null });
   }
 
-  private scheduleRefresh(): void {
+  private scheduleApplyFile(path: string): void {
+    this.pendingRemoves.delete(path);
+    this.pendingPaths.add(path);
+    this.armRefresh();
+  }
+
+  private scheduleRemoveFile(path: string): void {
+    this.pendingPaths.delete(path);
+    this.pendingRemoves.add(path);
+    this.armRefresh();
+  }
+
+  private armRefresh(): void {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(() => {
       this.refreshTimer = null;
-      void this.reindex();
+      void this.flushPending();
     }, 600);
+  }
+
+  private async flushPending(): Promise<void> {
+    const removes = Array.from(this.pendingRemoves);
+    const applies = Array.from(this.pendingPaths);
+    this.pendingRemoves.clear();
+    this.pendingPaths.clear();
+    for (const p of removes) this.store.removeFile(p);
+    for (const p of applies) await this.store.applyFile(p);
+    this.bus.emit("index:updated", { full: false });
   }
 
   async reindex(): Promise<void> {
@@ -327,10 +367,9 @@ export default class Taskgregator extends Plugin {
   }
 
   /** Rescan just one file, merging its tasks into the store, then refresh. */
-  async reindexFile(_path: string): Promise<void> {
-    // Simplicity + correctness: rebuild fully. Vault scans are cheap (cachedRead).
-    await this.store.rebuild();
-    this.bus.emit("index:updated", { full: true });
+  async reindexFile(path: string): Promise<void> {
+    await this.store.applyFile(path);
+    this.bus.emit("index:updated", { full: false });
   }
 
   private addTaskMenuItems(
@@ -412,11 +451,25 @@ export default class Taskgregator extends Plugin {
       if (!(def.id in this.settings.navShowCounts))
         this.settings.navShowCounts[def.id] = true;
     }
+    this.lastScopeKey = this.scopeKey();
+  }
+
+  /** Settings keys whose change can alter the set of indexed files. */
+  private scopeKey(): string {
+    return JSON.stringify([
+      this.settings.bucketRoots,
+      this.settings.inboxRoots,
+      this.settings.ignorePaths,
+    ]);
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     this.bus.emit("settings:changed", undefined);
-    await this.reindex();
+    const key = this.scopeKey();
+    if (key !== this.lastScopeKey) {
+      this.lastScopeKey = key;
+      await this.reindex();
+    }
   }
 }

@@ -6,7 +6,7 @@ import { parseLine, deriveBucket, nodeKeyForFile, ParserConfig } from "../src/co
 import { statusFromChar, nextStatusChar } from "../src/core/status-registry";
 import { applyStatusToLine, applyPriorityToLine, toggleTagInLine, ensureBlockIdInLine } from "../src/core/line-transforms";
 import { sortTasksBy, groupTasks, filterByQuery } from "../src/core/query";
-import { taskIdFor } from "../src/core/identity";
+import { stableIdFor, taskContentHash } from "../src/core/identity";
 import { TaskItem } from "../src/core/models";
 
 const cfg: ParserConfig = {
@@ -20,6 +20,7 @@ function task(partial: Partial<TaskItem>): TaskItem {
   return {
     id: "x",
     hasBlockId: false,
+    contentHash: "",
     filePath: "Projects/A.md",
     line: 0,
     indent: 0,
@@ -120,8 +121,18 @@ describe("core/query", () => {
 });
 
 describe("core/identity", () => {
-  it("block id takes precedence over line", () => {
-    expect(taskIdFor("P/x.md", 3, "abc")).toBe("P/x.md#^abc");
-    expect(taskIdFor("P/x.md", 3)).toBe("P/x.md:3");
+  it("block id takes precedence over content fingerprint", () => {
+    expect(stableIdFor("P/x.md", "Do thing", " ", "abc")).toBe("P/x.md#^abc");
+    expect(stableIdFor("P/x.md", "Do thing", " ")).toBe(
+      `P/x.md#${taskContentHash("P/x.md", "Do thing", " ")}`
+    );
+  });
+  it("content hash is line-independent and body-sensitive", () => {
+    expect(taskContentHash("P/x.md", "Do thing", " ")).toBe(
+      taskContentHash("P/x.md", "Do thing", " ")
+    );
+    expect(taskContentHash("P/x.md", "Do thing", " ")).not.toBe(
+      taskContentHash("P/x.md", "Other", " ")
+    );
   });
 });

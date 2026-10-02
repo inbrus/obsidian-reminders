@@ -33,12 +33,20 @@ class FakeClock implements IClock {
 class FakeAdapter implements IVaultAdapter, ILinkResolver {
   files = new Map<string, string>();
   folders = new Set<string>();
+  stats = new Map<string, VaultFileMeta>();
   links: Record<string, string> = {};
   opened: string | undefined;
   scope: VaultFileMeta[] = [];
 
   async scopedFiles(): Promise<VaultFileMeta[]> {
     return this.scope;
+  }
+  async stat(path: string): Promise<VaultFileMeta | null> {
+    if (this.stats.has(path)) return this.stats.get(path)!;
+    const meta = this.scope.find((f) => f.path === path);
+    if (meta) return meta;
+    if (this.files.has(path)) return { path, mtime: 1, ctime: 1 };
+    return null;
   }
   async read(path: string): Promise<string> {
     return this.files.get(path) ?? "";
@@ -156,5 +164,54 @@ describe("TaskStore over ports (end-to-end without Obsidian)", () => {
     await store.rebuild();
     const tree = store.buildContextTree();
     expect(tree.map((r) => r.label)).toContain("Projects");
+  });
+});
+
+describe("TaskStore incremental index (applyFile/removeFile)", () => {
+  function setup(files: Record<string, string>) {
+    const adapter = new FakeAdapter();
+    const clock = new FakeClock("2026-09-30");
+    const sidecar = new SidecarService(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const store = new TaskStore(scanner, adapter, clock, SETTINGS);
+    adapter.scope = Object.keys(files).map((path) => ({ path, mtime: 1, ctime: 1 }));
+    for (const [path, content] of Object.entries(files)) adapter.files.set(path, content);
+    return { adapter, store };
+  }
+
+  it("applyFile updates only the touched file's tasks", async () => {
+    const { adapter, store } = setup({
+      "Projects/A.md": "- [ ] Alpha",
+      "Projects/B.md": "- [ ] Beta",
+    });
+    await store.rebuild();
+    expect(store.visible().map((t) => t.text).sort()).toEqual(["Alpha", "Beta"]);
+
+    adapter.files.set("Projects/A.md", "- [ ] Alpha edited\n- [ ] New task");
+    adapter.stats.set("Projects/A.md", { path: "Projects/A.md", mtime: 2, ctime: 1 });
+    await store.applyFile("Projects/A.md");
+
+    expect(store.visible().map((t) => t.text).sort()).toEqual([
+      "Alpha edited",
+      "Beta",
+      "New task",
+    ]);
+  });
+
+  it("removeFile drops a file's tasks without touching others", async () => {
+    const { store } = setup({
+      "Projects/A.md": "- [ ] Alpha",
+      "Projects/B.md": "- [ ] Beta",
+    });
+    await store.rebuild();
+    store.removeFile("Projects/A.md");
+    expect(store.visible().map((t) => t.text)).toEqual(["Beta"]);
+  });
+
+  it("indexes tasks by block id for stable lookup", async () => {
+    const { store } = setup({ "Projects/A.md": "- [ ] Alpha ^block123" });
+    await store.rebuild();
+    expect(store.byBlockId("block123")?.text).toBe("Alpha");
+    expect(store.byBlockId("nope")).toBeUndefined();
   });
 });

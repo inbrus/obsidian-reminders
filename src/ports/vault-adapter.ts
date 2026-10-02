@@ -13,6 +13,8 @@ export interface VaultFileMeta {
 export interface IVaultAdapter {
   /** Markdown files under the configured bucket/inbox roots (deduped, non-recursive in name only — the adapter walks). */
   scopedFiles(bucketRoots: string[], inboxRoots: string[]): Promise<VaultFileMeta[]>;
+  /** Stat a single file (mtime/ctime), or null if missing or not a note. */
+  stat(path: string): Promise<VaultFileMeta | null>;
   /** Read a file's full text. Empty string if missing. */
   read(path: string): Promise<string>;
   /** True if a file or folder exists at `path`. */

@@ -1,9 +1,11 @@
-// TaskStore: in-memory index of tasks. Stateful; depends on the ports (vault
-// scanner, link resolver, clock) and settings — never on Obsidian directly.
-// Pure filtering/sorting/grouping and context-tree building live in
-// core/query.ts and core/context.ts.
+// TaskStore: in-memory index of tasks with inverted indexes for O(1) slices.
+// Stateful; depends on the ports (scanner, link resolver, clock) and settings —
+// never on Obsidian directly. applyFile/removeFile give incremental updates;
+// rebuild() is the full rescan (startup / Reindex / scope change). Pure
+// filtering/sorting/grouping and context-tree building live in core/query.ts
+// and core/context.ts.
 
-import { TaskItem, TreeNode } from "./types";
+import { TaskItem, TaskStatus, TreeNode } from "./types";
 import { TaskgregatorSettings } from "./settings";
 import { VaultScanner } from "./services/scanner";
 import { ILinkResolver } from "./ports/link-resolver";
@@ -11,8 +13,27 @@ import { IClock } from "./ports/clock";
 import { filterByQuery as filterTasks } from "./core/query";
 import { buildContextTree } from "./core/context";
 
+function addIndex<K>(map: Map<K, Set<string>>, key: K, id: string): void {
+  let s = map.get(key);
+  if (!s) map.set(key, (s = new Set()));
+  s.add(id);
+}
+
+function removeIndex<K>(map: Map<K, Set<string>>, key: K, id: string): void {
+  const s = map.get(key);
+  if (!s) return;
+  s.delete(id);
+  if (s.size === 0) map.delete(key);
+}
+
 export class TaskStore {
   tasks: Map<string, TaskItem> = new Map();
+  private byFile = new Map<string, Set<string>>();
+  private byTag = new Map<string, Set<string>>();
+  private byLink = new Map<string, Set<string>>();
+  private byDue = new Map<string, Set<string>>();
+  private byStatus = new Map<TaskStatus, Set<string>>();
+  private byBlockIdIndex = new Map<string, string>();
 
   constructor(
     private scanner: VaultScanner,
@@ -21,11 +42,69 @@ export class TaskStore {
     readonly settings: TaskgregatorSettings
   ) {}
 
+  // --- index maintenance ---
+
+  private indexOne(t: TaskItem): void {
+    this.tasks.set(t.id, t);
+    addIndex(this.byFile, t.filePath, t.id);
+    for (const tag of t.tags) addIndex(this.byTag, tag, t.id);
+    for (const l of t.links) addIndex(this.byLink, l, t.id);
+    if (t.meta.due) addIndex(this.byDue, t.meta.due, t.id);
+    addIndex(this.byStatus, t.status, t.id);
+    if (t.blockId) this.byBlockIdIndex.set(t.blockId, t.id);
+  }
+
+  private unindexOne(t: TaskItem): void {
+    this.tasks.delete(t.id);
+    removeIndex(this.byFile, t.filePath, t.id);
+    for (const tag of t.tags) removeIndex(this.byTag, tag, t.id);
+    for (const l of t.links) removeIndex(this.byLink, l, t.id);
+    if (t.meta.due) removeIndex(this.byDue, t.meta.due, t.id);
+    removeIndex(this.byStatus, t.status, t.id);
+    if (t.blockId) this.byBlockIdIndex.delete(t.blockId);
+  }
+
+  private clearIndexes(): void {
+    this.tasks.clear();
+    this.byFile.clear();
+    this.byTag.clear();
+    this.byLink.clear();
+    this.byDue.clear();
+    this.byStatus.clear();
+    this.byBlockIdIndex.clear();
+  }
+
+  /** Full rescan: startup, Reindex command, or a scope/settings change. */
   async rebuild(): Promise<void> {
     const all = await this.scanner.scan();
-    this.tasks.clear();
-    for (const t of all) this.tasks.set(t.id, t);
+    this.clearIndexes();
+    for (const t of all) this.indexOne(t);
   }
+
+  /** Incrementally re-read one file and replace its tasks in the index. */
+  async applyFile(path: string): Promise<void> {
+    const oldIds = this.byFile.get(path);
+    if (oldIds) {
+      for (const id of Array.from(oldIds)) {
+        const t = this.tasks.get(id);
+        if (t) this.unindexOne(t);
+      }
+    }
+    const fresh = await this.scanner.scanFile(path);
+    for (const t of fresh) this.indexOne(t);
+  }
+
+  /** Drop every task belonging to a deleted or renamed file. */
+  removeFile(path: string): void {
+    const oldIds = this.byFile.get(path);
+    if (!oldIds) return;
+    for (const id of Array.from(oldIds)) {
+      const t = this.tasks.get(id);
+      if (t) this.unindexOne(t);
+    }
+  }
+
+  // --- lookups ---
 
   /** Resolve a wikilink target to a vault path (delegates to the link resolver). */
   resolveLink(link: string, fromPath: string): string | undefined {
@@ -36,6 +115,24 @@ export class TaskStore {
     return Array.from(this.tasks.values());
   }
 
+  byId(id: string): TaskItem | undefined {
+    return this.tasks.get(id);
+  }
+
+  /** Find a task by its block id (without caret). */
+  byBlockId(blockId: string): TaskItem | undefined {
+    const id = this.byBlockIdIndex.get(blockId);
+    return id ? this.tasks.get(id) : undefined;
+  }
+
+  private fromIndex<K>(map: Map<K, Set<string>>, key: K): TaskItem[] {
+    const ids = map.get(key);
+    if (!ids) return [];
+    return Array.from(ids)
+      .map((id) => this.tasks.get(id))
+      .filter((t): t is TaskItem => !!t);
+  }
+
   /** Open (actionable) tasks. Completed tasks live in the dedicated Completed hub. */
   visible(): TaskItem[] {
     return this.all().filter((t) => t.status === "open" || t.status === "inProgress");
@@ -43,16 +140,12 @@ export class TaskStore {
 
   /** Completed (done) tasks, shown only in the Completed hub. */
   completed(): TaskItem[] {
-    return this.all().filter((t) => t.status === "done");
+    return this.fromIndex(this.byStatus, "done");
   }
 
   /** In-progress tasks. */
   inProgress(): TaskItem[] {
-    return this.all().filter((t) => t.status === "inProgress");
-  }
-
-  byId(id: string): TaskItem | undefined {
-    return this.tasks.get(id);
+    return this.fromIndex(this.byStatus, "inProgress");
   }
 
   /** Delegate free-text filtering to the pure query engine. */
@@ -75,9 +168,19 @@ export class TaskStore {
   /** Tasks that reference a given file/person by wikilink (cross-index). */
   tasksLinking(nameOrPath: string): TaskItem[] {
     const target = nameOrPath.split("/").pop() || nameOrPath;
-    return this.visible().filter((t) =>
-      t.links.some((l) => l === nameOrPath || (l.split("/").pop() || l) === target)
-    );
+    const out: TaskItem[] = [];
+    const seen = new Set<string>();
+    for (const [link, ids] of this.byLink) {
+      const linkName = link.split("/").pop() || link;
+      if (link !== nameOrPath && linkName !== target) continue;
+      for (const id of ids) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const t = this.tasks.get(id);
+        if (t && (t.status === "open" || t.status === "inProgress")) out.push(t);
+      }
+    }
+    return out;
   }
 
   /** Tasks for a context-tree node key. */
@@ -95,12 +198,20 @@ export class TaskStore {
 
   /** Tasks carrying a given tag (smart list). */
   tasksWithTag(tag: string): TaskItem[] {
-    return this.visible().filter((t) => t.tags.includes(tag));
+    return this.fromIndex(this.byTag, tag).filter(
+      (t) => t.status === "open" || t.status === "inProgress"
+    );
   }
 
   /** Visible tasks that carry at least one tag (the "All Tags" rollup). */
   taggedTasks(): TaskItem[] {
-    return this.visible().filter((t) => t.tags.length > 0);
+    const ids = new Set<string>();
+    for (const [, s] of this.byTag) for (const id of s) ids.add(id);
+    return Array.from(ids)
+      .map((id) => this.tasks.get(id))
+      .filter(
+        (t): t is TaskItem => !!t && (t.status === "open" || t.status === "inProgress")
+      );
   }
 
   /** Visible tasks with no tags at all (the Inbox list). */
@@ -110,63 +221,115 @@ export class TaskStore {
 
   /** Distinct tags in use with their open-task counts, sorted alphabetically. */
   tagCounts(): { tag: string; count: number }[] {
-    const counts = new Map<string, number>();
-    for (const t of this.visible()) {
-      for (const tag of new Set(t.tags)) counts.set(tag, (counts.get(tag) || 0) + 1);
+    const counts: { tag: string; count: number }[] = [];
+    for (const [tag, ids] of this.byTag) {
+      let n = 0;
+      for (const id of ids) {
+        const t = this.tasks.get(id);
+        if (t && (t.status === "open" || t.status === "inProgress")) n++;
+      }
+      if (n > 0) counts.push({ tag, count: n });
     }
-    return Array.from(counts.entries())
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => a.tag.localeCompare(b.tag, "en"));
+    return counts.sort((a, b) => a.tag.localeCompare(b.tag, "en"));
   }
+
+  // --- due slices (local calendar) ---
 
   /** Tasks due before today (Overdue smart list core). */
   overdue(): TaskItem[] {
-    const today = this.clock.todayIso();
-    return this.visible().filter((t) => t.meta.due && t.meta.due < today);
+    return this.dueBefore(this.clock.todayIso());
   }
 
   /** Tasks due exactly today (Today smart list core). */
   dueToday(): TaskItem[] {
-    const today = this.clock.todayIso();
-    return this.visible().filter((t) => t.meta.due === today);
+    return this.fromIndex(this.byDue, this.clock.todayIso()).filter(
+      (t) => t.status === "open" || t.status === "inProgress"
+    );
   }
 
   /** Tasks due tomorrow. */
   dueTomorrow(): TaskItem[] {
-    const tomorrow = this.clock.offsetDays(1);
-    return this.visible().filter((t) => t.meta.due === tomorrow);
+    return this.fromIndex(this.byDue, this.clock.offsetDays(1)).filter(
+      (t) => t.status === "open" || t.status === "inProgress"
+    );
   }
 
   /** Tasks due within the next `soonDays` days (after today, through today+N). */
   dueSoon(): TaskItem[] {
     const today = this.clock.todayIso();
     const end = this.clock.offsetDays(Math.max(1, this.settings.soonDays));
-    return this.visible().filter((t) => t.meta.due && t.meta.due > today && t.meta.due <= end);
+    return this.dueBetween(today, end);
+  }
+
+  private dueBefore(date: string): TaskItem[] {
+    const out: TaskItem[] = [];
+    for (const [due, ids] of this.byDue) {
+      if (due >= date) continue;
+      for (const id of ids) {
+        const t = this.tasks.get(id);
+        if (t && (t.status === "open" || t.status === "inProgress")) out.push(t);
+      }
+    }
+    return out;
+  }
+
+  private dueBetween(after: string, end: string): TaskItem[] {
+    const out: TaskItem[] = [];
+    for (const [due, ids] of this.byDue) {
+      if (due <= after || due > end) continue;
+      for (const id of ids) {
+        const t = this.tasks.get(id);
+        if (t && (t.status === "open" || t.status === "inProgress")) out.push(t);
+      }
+    }
+    return out;
   }
 
   /**
    * Aging tasks: still-open tasks whose created date is `agingDays` days ago or
-   * older (i.e. they've been sitting around). Tasks with no created date are
-   * excluded since we can't tell how old they are. Reads created from either
-   * the ➕ emoji or the [created:: …] Dataview field (handled by the parser).
+   * older. Reads created from the ➕ emoji or the [created:: …] Dataview field.
    */
   aging(): TaskItem[] {
     const cutoff = this.clock.offsetDays(-Math.max(1, this.settings.agingDays));
     return this.visible().filter((t) => t.meta.created && t.meta.created <= cutoff);
   }
 
+  /** Single-pass counts over the open/in-progress set (plus completed size). */
   counts() {
-    const v = this.visible();
-    return {
-      total: v.length,
-      overdue: this.overdue().length,
-      today: this.dueToday().length,
-      tomorrow: this.dueTomorrow().length,
-      soon: this.dueSoon().length,
-      inbox: this.untagged().length,
-      inprogress: this.inProgress().length,
-      completed: this.completed().length,
-      flagged: v.filter((t) => t.priority > 0 && t.priority <= 2).length,
+    const today = this.clock.todayIso();
+    const tomorrow = this.clock.offsetDays(1);
+    const soonEnd = this.clock.offsetDays(Math.max(1, this.settings.soonDays));
+    const c = {
+      total: 0,
+      overdue: 0,
+      today: 0,
+      tomorrow: 0,
+      soon: 0,
+      inbox: 0,
+      inprogress: 0,
+      completed: 0,
+      flagged: 0,
     };
+    const seen = new Set<string>();
+    for (const ids of [this.byStatus.get("open"), this.byStatus.get("inProgress")]) {
+      if (!ids) continue;
+      for (const id of ids) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const t = this.tasks.get(id);
+        if (!t) continue;
+        c.total++;
+        const due = t.meta.due;
+        if (due && due < today) c.overdue++;
+        if (due === today) c.today++;
+        if (due === tomorrow) c.tomorrow++;
+        if (due && due > today && due <= soonEnd) c.soon++;
+        if (t.tags.length === 0) c.inbox++;
+        if (t.status === "inProgress") c.inprogress++;
+        if (t.priority > 0 && t.priority <= 2) c.flagged++;
+      }
+    }
+    c.completed = this.byStatus.get("done")?.size ?? 0;
+    return c;
   }
 }

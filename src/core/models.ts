@@ -13,11 +13,12 @@ export interface RawTaskMeta {
 }
 
 export interface TaskItem {
-  id: string; // stable identity: block id if present, else synthetic path:line
+  id: string; // stable identity: `path#^blockId` when a block id exists, else a content fingerprint `path#<hash>`
   blockId?: string; // ^abc123 (without caret) if the source line has one
   hasBlockId: boolean;
+  contentHash: string; // FNV-1a of (path + status + normalized body), for write-time fallback lookup
   filePath: string; // vault-relative path of the source file
-  line: number; // 0-based line index in the source file
+  line: number; // 0-based line index in the source file (location, not identity)
   indent: number; // leading whitespace length (for parent/child nesting)
   statusChar: string; // the raw char inside [ ]
   status: TaskStatus;

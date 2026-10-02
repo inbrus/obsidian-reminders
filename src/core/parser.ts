@@ -15,7 +15,7 @@ import {
   readDvPriority,
   stripDataviewFields,
 } from "./metadata-codec";
-import { taskIdFor } from "./identity";
+import { stableIdFor, taskContentHash } from "./identity";
 
 const TASK_RE = /^(\s*)[-*+]\s+\[(.)\]\s?(.*)$/;
 
@@ -178,12 +178,14 @@ export function parseLine(
   // Bucket context from the path.
   const { bucketRoot, bucketFile } = deriveBucket(filePath, settings);
 
-  const id = taskIdFor(filePath, line, blockId);
+  const contentHash = taskContentHash(filePath, text, statusChar);
+  const id = stableIdFor(filePath, text, statusChar, blockId);
 
   return {
     id,
     blockId,
     hasBlockId: !!blockId,
+    contentHash,
     filePath,
     line,
     indent,
