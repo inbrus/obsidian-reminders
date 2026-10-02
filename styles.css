@@ -44,7 +44,7 @@
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  font-size: 0.9em;
+  font-size: var(--font-ui-small);
   padding: 5px 8px;
   border-radius: 6px;
   border: 1px solid var(--background-modifier-border);
@@ -88,7 +88,7 @@
 .obsidian-reminders .tg-section { margin-bottom: 10px; }
 
 .obsidian-reminders .tg-section-title {
-  font-size: 0.72em;
+  font-size: var(--font-ui-smaller);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -103,7 +103,7 @@
   padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: var(--font-ui-small);
 }
 .obsidian-reminders .tg-side-item:hover,
 .obsidian-reminders .tg-tree-row:hover {
@@ -146,7 +146,7 @@
 }
 
 .obsidian-reminders .tg-badge {
-  font-size: 0.75em;
+  font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   background: var(--background-modifier-border);
   border-radius: 8px;
@@ -353,7 +353,7 @@
   flex-wrap: wrap;
 }
 .obsidian-reminders .tg-pillrow-label {
-  font-size: 11px;
+  font-size: var(--font-ui-smaller);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -393,14 +393,14 @@
 }
 .obsidian-reminders .tg-group-header:first-child { padding-top: 2px; }
 .obsidian-reminders .tg-group-label {
-  font-size: 11px;
+  font-size: var(--font-ui-smaller);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 .obsidian-reminders .tg-group-count {
-  font-size: 10px;
+  font-size: var(--font-ui-smaller);
   color: var(--text-faint);
 }
 
@@ -416,7 +416,7 @@
   padding: 2px 2px 0;
 }
 .obsidian-reminders.tg-context .tg-context-name {
-  font-size: 14px;
+  font-size: var(--font-ui-small);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -424,11 +424,11 @@
 }
 .obsidian-reminders.tg-context .tg-count {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--font-ui-smaller);
   color: var(--text-faint);
 }
 .obsidian-reminders.tg-context .tg-context-sub {
-  font-size: 10px;
+  font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   margin: 0 2px 6px;
   overflow: hidden;
@@ -437,7 +437,7 @@
 }
 .obsidian-reminders.tg-context .tg-empty {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-ui-smaller);
   padding: 12px 4px;
 }
 
@@ -629,3 +629,11 @@
   border-radius: var(--radius-s, 4px);
   padding: 2px 6px;
 }
+
+/* Mobile: larger nav type via --font-ui-* variables (touch-friendly). These
+   scale with Obsidian's system font size since 1.14. */
+body.is-phone .obsidian-reminders .tg-search-input { font-size: var(--font-ui-medium); }
+body.is-phone .obsidian-reminders .tg-side-item,
+body.is-phone .obsidian-reminders .tg-tree-row { font-size: var(--font-ui-medium); }
+body.is-phone .obsidian-reminders .tg-section-title { font-size: var(--font-ui-small); }
+body.is-phone .obsidian-reminders .tg-badge { font-size: var(--font-ui-small); }
