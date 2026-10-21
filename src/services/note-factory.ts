@@ -49,14 +49,24 @@ export class NoteFactory {
     return (t || "").trim();
   }
 
-  /** Path of an existing typed note for a block id, or undefined. */
-  findByBlockId(blockId: string): string | undefined {
+  /** Path of an existing typed note for a block id, or undefined. With `kind`,
+   * only that kind's folder is searched (a todo can carry a project, a task and
+   * a subtask note side by side). Without it, all typed folders plus the legacy
+   * sidecar folder are searched (inline icon / identity migration). */
+  findByBlockId(blockId: string, kind?: NoteKind): string | undefined {
     const needle = ` ${blockId}.md`;
-    for (const kind of NOTE_KINDS) {
-      const folder = this.folderFor(kind);
-      const names = this.adapter.listFolder(folder);
-      const match = names.find((n) => n.endsWith(needle));
+    const kinds = kind ? [kind] : [...NOTE_KINDS];
+    for (const k of kinds) {
+      const folder = this.folderFor(k);
+      const match = this.adapter.listFolder(folder).find((n) => n.endsWith(needle));
       if (match) return `${folder}/${match}`;
+    }
+    if (!kind) {
+      const sidecarFolder = normalizePath(this.settings.sidecarFolder);
+      const match = this.adapter
+        .listFolder(sidecarFolder)
+        .find((n) => n.endsWith(needle));
+      if (match) return `${sidecarFolder}/${match}`;
     }
     return undefined;
   }
@@ -69,7 +79,7 @@ export class NoteFactory {
     sourcePath: string,
     task?: TaskItem
   ): Promise<string> {
-    const existing = this.findByBlockId(blockId);
+    const existing = this.findByBlockId(blockId, kind);
     if (existing) return existing;
 
     const folder = this.folderFor(kind);

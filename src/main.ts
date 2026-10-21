@@ -34,9 +34,13 @@ import { IdentityMigration, RepairReport } from "./services/identity-migration";
 /** Minimal shape of Templater's runtime, for template expansion. */
 interface TemplaterRuntime {
   parse_template?: (
-    content: string,
-    targetFile: unknown
-  ) => Promise<() => Promise<string>>;
+    config: {
+      template_file?: unknown;
+      target_file: unknown;
+      run_mode: number;
+    },
+    template_content: string
+  ) => Promise<string>;
 }
 
 export default class ObsidianReminders extends Plugin {
@@ -271,8 +275,9 @@ export default class ObsidianReminders extends Plugin {
     if (!tp?.parse_template) return content;
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!file) return content;
-    const fn = await tp.parse_template(content, file);
-    return await fn();
+    // parse_template(config, template_content) resolves to the rendered string.
+    // run_mode 4 = Templater's DynamicProcessor (render a template string in place).
+    return tp.parse_template({ target_file: file, run_mode: 4 }, content);
   }
 
   /**
