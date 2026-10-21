@@ -1,7 +1,7 @@
 {
   "id": "obsidian-reminders",
   "name": "Obsidian Reminders",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.13.0",
   "description": "Aggregates your plain markdown checkboxes into smart lists, a context tree, and a context sidebar — tasks stay in your notes, no separate store.",
   "author": "inbrus",
