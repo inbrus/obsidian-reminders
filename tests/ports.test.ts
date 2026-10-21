@@ -11,6 +11,7 @@ import { localISODate } from "../src/core/date";
 import { parseLine } from "../src/core/parser";
 import { ObsidianRemindersSettings, DEFAULT_SETTINGS } from "../src/settings";
 import { SidecarService } from "../src/services/sidecar";
+import { NoteFactory } from "../src/services/note-factory";
 import { TaskWriter } from "../src/services/writer";
 import { VaultScanner } from "../src/services/scanner";
 import { TaskStore } from "../src/store";
@@ -136,7 +137,8 @@ describe("TaskWriter over IVaultAdapter", () => {
     const adapter = new FakeAdapter();
     const clock = new FakeClock("2026-09-30");
     const sidecar = new SidecarService(adapter, clock, SETTINGS);
-    const writer = new TaskWriter(adapter, sidecar, SETTINGS, async () => null);
+    const notes = new NoteFactory(adapter, clock, SETTINGS);
+    const writer = new TaskWriter(adapter, sidecar, notes, SETTINGS, async () => null);
 
     const task = parseLine("- [ ] Do the thing", "Projects/A.md", 0, SETTINGS)!;
     adapter.files.set(task.filePath, "- [ ] Do the thing");
@@ -150,8 +152,8 @@ describe("TaskStore over ports (end-to-end without Obsidian)", () => {
   it("indexes and slices 'today' via the injected clock", async () => {
     const adapter = new FakeAdapter();
     const clock = new FakeClock("2026-09-30");
-    const sidecar = new SidecarService(adapter, clock, SETTINGS);
-    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const notes = new NoteFactory(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, notes, SETTINGS);
     const store = new TaskStore(scanner, adapter, clock, SETTINGS);
 
     adapter.scope = [{ path: "Projects/A.md", mtime: 1, ctime: 1 }];
@@ -170,8 +172,8 @@ describe("TaskStore over ports (end-to-end without Obsidian)", () => {
   it("resolves context-tree links through the injected link resolver", async () => {
     const adapter = new FakeAdapter();
     const clock = new FakeClock("2026-09-30");
-    const sidecar = new SidecarService(adapter, clock, SETTINGS);
-    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const notes = new NoteFactory(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, notes, SETTINGS);
     const store = new TaskStore(scanner, adapter, clock, SETTINGS);
 
     adapter.scope = [{ path: "Projects/A.md", mtime: 1, ctime: 1 }];
@@ -188,8 +190,8 @@ describe("TaskStore incremental index (applyFile/removeFile)", () => {
   function setup(files: Record<string, string>) {
     const adapter = new FakeAdapter();
     const clock = new FakeClock("2026-09-30");
-    const sidecar = new SidecarService(adapter, clock, SETTINGS);
-    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const notes = new NoteFactory(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, notes, SETTINGS);
     const store = new TaskStore(scanner, adapter, clock, SETTINGS);
     adapter.scope = Object.keys(files).map((path) => ({ path, mtime: 1, ctime: 1 }));
     for (const [path, content] of Object.entries(files)) adapter.files.set(path, content);
@@ -254,8 +256,8 @@ describe("IndexPersistence over IStorage", () => {
   it("rebuild restores unchanged files from cache and re-reads changed ones", async () => {
     const adapter = new FakeAdapter();
     const clock = new FakeClock("2026-09-30");
-    const sidecar = new SidecarService(adapter, clock, SETTINGS);
-    const scanner = new VaultScanner(adapter, sidecar, SETTINGS);
+    const notes = new NoteFactory(adapter, clock, SETTINGS);
+    const scanner = new VaultScanner(adapter, notes, SETTINGS);
     const store = new TaskStore(scanner, adapter, clock, SETTINGS);
 
     adapter.scope = [

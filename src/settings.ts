@@ -33,6 +33,14 @@ export interface ObsidianRemindersSettings {
   smartLists: SmartList[];
   // Folder for per-task detail notes (sidecars).
   sidecarFolder: string;
+  // Folders for typed project/task/subtask notes (created from the "New …" menu).
+  projectFolder: string;
+  taskFolder: string;
+  subtaskFolder: string;
+  // Optional template file per type (Templater/core Templates path; empty = built-in).
+  projectTemplate: string;
+  taskTemplate: string;
+  subtaskTemplate: string;
   // Date format used when writing dates (Tasks-plugin default is YYYY-MM-DD).
   dateFormat: string;
   // Emoji signifiers (Tasks-plugin compatible).
@@ -74,6 +82,12 @@ export const DEFAULT_SETTINGS: ObsidianRemindersSettings = {
     { name: "Someday", tag: "someday", icon: "clock" },
   ],
   sidecarFolder: "Obsidian Reminders/tasksData",
+  projectFolder: "Obsidian Reminders/projects",
+  taskFolder: "Obsidian Reminders/tasks",
+  subtaskFolder: "Obsidian Reminders/subtasks",
+  projectTemplate: "",
+  taskTemplate: "",
+  subtaskTemplate: "",
   dateFormat: "YYYY-MM-DD",
   useEmojiMetadata: true,
   enableContextSidebar: true,
@@ -218,6 +232,36 @@ export class ObsidianRemindersSettingTab extends PluginSettingTab {
         control: { type: "text", key: "sidecarFolder" },
       },
       {
+        name: "Project folder",
+        desc: "Folder for notes created with 'New project'.",
+        control: { type: "text", key: "projectFolder" },
+      },
+      {
+        name: "Task folder",
+        desc: "Folder for notes created with 'New task'.",
+        control: { type: "text", key: "taskFolder" },
+      },
+      {
+        name: "Subtask folder",
+        desc: "Folder for notes created with 'New subtask'.",
+        control: { type: "text", key: "subtaskFolder" },
+      },
+      {
+        name: "Project template",
+        desc: "Templater/core Templates file path for projects (empty = built-in).",
+        control: { type: "text", key: "projectTemplate" },
+      },
+      {
+        name: "Task template",
+        desc: "Templater/core Templates file path for tasks (empty = built-in).",
+        control: { type: "text", key: "taskTemplate" },
+      },
+      {
+        name: "Subtask template",
+        desc: "Templater/core Templates file path for subtasks (empty = built-in).",
+        control: { type: "text", key: "subtaskTemplate" },
+      },
+      {
         name: "Soon window (days)",
         desc: "Soon list shows tasks due within this many days (default 7).",
         control: { type: "text", key: "soonDays" },
@@ -287,6 +331,18 @@ export class ObsidianRemindersSettingTab extends PluginSettingTab {
         return s.smartLists.map((x) => `${x.name}:${x.tag}`).join(", ");
       case "sidecarFolder":
         return s.sidecarFolder;
+      case "projectFolder":
+        return s.projectFolder;
+      case "taskFolder":
+        return s.taskFolder;
+      case "subtaskFolder":
+        return s.subtaskFolder;
+      case "projectTemplate":
+        return s.projectTemplate;
+      case "taskTemplate":
+        return s.taskTemplate;
+      case "subtaskTemplate":
+        return s.subtaskTemplate;
       case "soonDays":
         return String(s.soonDays);
       case "agingDays":
@@ -324,6 +380,24 @@ export class ObsidianRemindersSettingTab extends PluginSettingTab {
         break;
       case "sidecarFolder":
         s.sidecarFolder = String(value).trim().replace(/\/$/, "");
+        break;
+      case "projectFolder":
+        s.projectFolder = String(value).trim().replace(/\/$/, "");
+        break;
+      case "taskFolder":
+        s.taskFolder = String(value).trim().replace(/\/$/, "");
+        break;
+      case "subtaskFolder":
+        s.subtaskFolder = String(value).trim().replace(/\/$/, "");
+        break;
+      case "projectTemplate":
+        s.projectTemplate = String(value).trim();
+        break;
+      case "taskTemplate":
+        s.taskTemplate = String(value).trim();
+        break;
+      case "subtaskTemplate":
+        s.subtaskTemplate = String(value).trim();
         break;
       case "soonDays":
         s.soonDays = clampDays(value);

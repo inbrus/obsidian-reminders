@@ -12,6 +12,8 @@ import {
 } from "./core/line-transforms";
 import { parseLine, NAV_SECTIONS } from "./parser";
 import { SidecarService } from "./services/sidecar";
+import { NoteFactory } from "./services/note-factory";
+import { NOTE_KINDS, noteKindIcon, noteKindLabel } from "./core/note-template";
 import { VaultScanner } from "./services/scanner";
 import { ObsidianVaultAdapter } from "./infra/obsidian-vault-adapter";
 import { ObsidianClock } from "./infra/obsidian-clock";
@@ -29,6 +31,14 @@ import { ObsidianStorage } from "./infra/obsidian-storage";
 import { IndexPersistence } from "./services/index-persistence";
 import { IdentityMigration, RepairReport } from "./services/identity-migration";
 
+/** Minimal shape of Templater's runtime, for template expansion. */
+interface TemplaterRuntime {
+  parse_template?: (
+    content: string,
+    targetFile: unknown
+  ) => Promise<() => Promise<string>>;
+}
+
 export default class ObsidianReminders extends Plugin {
   settings!: ObsidianRemindersSettings;
   store!: TaskStore;
@@ -36,6 +46,7 @@ export default class ObsidianReminders extends Plugin {
   state!: UiStateStore;
   bus!: EventBus;
   private sidecar!: SidecarService;
+  private notes!: NoteFactory;
   private refreshTimer: number | null = null;
   private pendingPaths = new Set<string>();
   private pendingRemoves = new Set<string>();
@@ -56,11 +67,15 @@ export default class ObsidianReminders extends Plugin {
     );
     this.migration = new IdentityMigration(adapter, this.settings);
     this.sidecar = new SidecarService(adapter, clock, this.settings);
-    const scanner = new VaultScanner(adapter, this.sidecar, this.settings);
+    this.notes = new NoteFactory(adapter, clock, this.settings, (content, path) =>
+      this.expandTemplate(content, path)
+    );
+    const scanner = new VaultScanner(adapter, this.notes, this.settings);
     this.store = new TaskStore(scanner, adapter, clock, this.settings);
     this.writer = new TaskWriter(
       adapter,
       this.sidecar,
+      this.notes,
       this.settings,
       () => getTasksPluginFormat(this.app)
     );
@@ -147,8 +162,8 @@ export default class ObsidianReminders extends Plugin {
     // Same idea in Live Preview: hide the raw `^tg…` id and show a 📝 note icon.
     this.registerEditorExtension([
       noteIconLivePreview(
-        (blockId) => this.hasSidecar(blockId),
-        (blockId) => this.openSidecarById(blockId)
+        (blockId) => this.hasNote(blockId),
+        (blockId) => this.openNoteById(blockId)
       ),
     ]);
 
@@ -236,15 +251,28 @@ export default class ObsidianReminders extends Plugin {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
   }
 
-  /** Does a detail (sidecar) note exist for this block id? */
-  private hasSidecar(blockId: string): boolean {
-    return this.sidecar.findByBlockId(blockId) !== undefined;
+  /** Does a typed (project/task/subtask) note exist for this block id? */
+  private hasNote(blockId: string): boolean {
+    return this.notes.findByBlockId(blockId) !== undefined;
   }
 
-  /** Open the detail note for a block id (used by the inline note icons). */
-  private openSidecarById(blockId: string): void {
-    const path = this.sidecar.findByBlockId(blockId);
+  /** Open the typed note for a block id (used by the inline note icons). */
+  private openNoteById(blockId: string): void {
+    const path = this.notes.findByBlockId(blockId);
     if (path) void this.writer.openPath(path);
+  }
+
+  /** Expand a template string through Templater (if installed), else pass through. */
+  private async expandTemplate(content: string, path: string): Promise<string> {
+    const host = this.app as unknown as {
+      plugins?: { plugins?: Record<string, { templater?: TemplaterRuntime }> };
+    };
+    const tp = host.plugins?.plugins?.["templater-obsidian"]?.templater;
+    if (!tp?.parse_template) return content;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file) return content;
+    const fn = await tp.parse_template(content, file);
+    return await fn();
   }
 
   /**
@@ -287,7 +315,7 @@ export default class ObsidianReminders extends Plugin {
       if (!blockId) return;
       const bid = blockId;
 
-      if (!this.hasSidecar(bid)) return;
+      if (!this.hasNote(bid)) return;
       if (li.querySelector(".tg-inline-note")) return;
 
       const icon = createSpan({ cls: "tg-inline-note" });
@@ -296,7 +324,7 @@ export default class ObsidianReminders extends Plugin {
       icon.onClickEvent((e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.openSidecarById(bid);
+        this.openNoteById(bid);
       });
 
       // Place the icon right after the task text (before any nested list).
@@ -457,16 +485,20 @@ export default class ObsidianReminders extends Plugin {
         onClick: () => set(toggleTagInLine(get(), "today")),
       },
       {
-        title: "Reminders: Open detail note",
+        title: "Reminders: New note",
         icon: "sticky-note",
-        onClick: async () => {
-          const parsed = parseLine(get(), filePath, lineNo, this.settings);
-          const title = parsed?.text || get();
-          const { line: stamped, blockId } = ensureBlockIdInLine(get());
-          if (stamped !== get()) set(stamped);
-          const path = await this.writer.ensureSidecarFor(blockId, title, filePath, parsed ?? undefined);
-          await this.writer.openPath(path);
-        },
+        submenu: NOTE_KINDS.map((kind) => ({
+          title: `New ${noteKindLabel(kind)}`,
+          icon: noteKindIcon(kind),
+          onClick: async () => {
+            const parsed = parseLine(get(), filePath, lineNo, this.settings);
+            const title = parsed?.text || get();
+            const { line: stamped, blockId } = ensureBlockIdInLine(get());
+            if (stamped !== get()) set(stamped);
+            const path = await this.notes.createNote(kind, blockId, title, filePath, parsed ?? undefined);
+            await this.writer.openPath(path);
+          },
+        })),
       },
       {
         title: "Reminders: Reveal in task list",

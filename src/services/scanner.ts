@@ -6,12 +6,12 @@ import { IVaultAdapter, VaultFileMeta } from "../ports/vault-adapter";
 import { TaskItem } from "../core/models";
 import { ObsidianRemindersSettings } from "../settings";
 import { parseLine, isIgnored } from "../core/parser";
-import { SidecarService } from "./sidecar";
+import { NoteFactory } from "./note-factory";
 
 export class VaultScanner {
   constructor(
     private adapter: IVaultAdapter,
-    private sidecar: SidecarService,
+    private notes: NoteFactory,
     private settings: ObsidianRemindersSettings
   ) {}
 
@@ -63,7 +63,7 @@ export class VaultScanner {
         task.mtime = mtime;
         task.ctime = ctime;
         if (task.blockId) {
-          const sf = this.sidecar.findByBlockId(task.blockId);
+          const sf = this.notes.findByBlockId(task.blockId);
           if (sf) task.sidecarPath = sf;
         }
         out.push(task);

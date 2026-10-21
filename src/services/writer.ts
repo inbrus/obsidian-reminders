@@ -19,6 +19,8 @@ import {
 import { TaskFormat } from "../core/metadata-codec";
 import { parseLine } from "../core/parser";
 import { SidecarService } from "./sidecar";
+import { NoteFactory } from "./note-factory";
+import { NoteKind } from "../core/note-template";
 
 /** Provider for the Tasks plugin's configured format (auto-resolution). */
 export type TasksFormatProvider = () => Promise<TaskFormat | null>;
@@ -27,6 +29,7 @@ export class TaskWriter {
   constructor(
     private adapter: IVaultAdapter,
     private sidecar: SidecarService,
+    private notes: NoteFactory,
     private settings: ObsidianRemindersSettings,
     private getTasksFormat: TasksFormatProvider
   ) {}
@@ -142,5 +145,19 @@ export class TaskWriter {
 
   async openPath(path: string): Promise<void> {
     await this.adapter.openFile(path);
+  }
+
+  /** Create (if missing) a typed note for a task; returns its path. */
+  async createNote(kind: NoteKind, task: TaskItem): Promise<string> {
+    const blockId = await this.ensureBlockId(task);
+    const path = await this.notes.createNote(kind, blockId, task.text, task.filePath, task);
+    task.sidecarPath = path;
+    return path;
+  }
+
+  /** Create a typed note for a task and open it. */
+  async openNote(kind: NoteKind, task: TaskItem): Promise<void> {
+    const path = await this.createNote(kind, task);
+    await this.openPath(path);
   }
 }

@@ -5,6 +5,7 @@ import { ALT_CHECKBOX_ICONS, nextStatusChar } from "./parser";
 import { toIso, fromIso, localISODate } from "./dateFormat";
 import { buildMenu, priorityActions } from "./editor/menu";
 import { iconForEmoji } from "./core/icon-map";
+import { NOTE_KINDS, noteKindIcon, noteKindLabel } from "./core/note-template";
 
 /**
  * Shared task-row rendering used by both the full ObsidianReminders hub view and the
@@ -137,7 +138,7 @@ export function renderTaskRow(parent: HTMLElement, task: TaskItem, ctx: TaskRowC
   if (task.sidecarPath) {
     const note = meta.createSpan({ cls: "tg-chip tg-note" });
     setIcon(note, "sticky-note");
-    note.setAttr("aria-label", "Open detail note");
+    note.setAttr("aria-label", "Open note");
     note.onclick = (ev) => {
       ev.stopPropagation();
       void ctx.writer.openPath(task.sidecarPath as string);
@@ -216,12 +217,16 @@ function taskMenu(e: MouseEvent, task: TaskItem, ctx: TaskRowCtx): void {
     },
     { separator: true },
     {
-      title: "Open detail note",
+      title: "New note",
       icon: "sticky-note",
-      onClick: async () => {
-        await ctx.writer.openSidecar(task);
-        await ctx.reindexFile(task.filePath);
-      },
+      submenu: NOTE_KINDS.map((kind) => ({
+        title: `New ${noteKindLabel(kind)}`,
+        icon: noteKindIcon(kind),
+        onClick: async () => {
+          await ctx.writer.openNote(kind, task);
+          await ctx.reindexFile(task.filePath);
+        },
+      })),
     },
     { title: "Jump to source", icon: "arrow-up-right", onClick: () => jumpToSource(ctx.app, task) },
     { separator: true },
